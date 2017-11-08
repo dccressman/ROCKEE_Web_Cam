@@ -21,15 +21,11 @@ int theObject[2] = { 0,0 };
 Mat edges;
 int minArea = 1000;
 int minDistance = 1000;
-void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture)
+void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints, vector<float> slope)
 {
-	vector<int> weight;
 	int k = 0;
 	bool keep = true;
-	vector<Point2f> midpoints;// change to point3f and get rid of the weight vector
-
-	midpoints.resize(keypoints.size()*keypoints.size());
-	weight.resize(keypoints.size()*keypoints.size());
+	
 	for (int i = 0; i < keypoints.size(); i++)
 	{
 		circle(maskedI, keypoints[i].pt, (keypoints[i].size / 2), (255, 255, 255), -1);
@@ -40,7 +36,6 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture)
 		for (int j = i + 1;j < keypoints.size(); j++) {
 			midpoints[k].x = (keypoints[i].pt.x + keypoints[j].pt.x) / 2;
 			midpoints[k].y = (keypoints[i].pt.y + keypoints[j].pt.y) / 2;
-
 			Vec3b color = maskedI.at<Vec3b>(Point(midpoints[k].x, midpoints[k].y));
 			keep = true;
 			if (color[0] == 0)
@@ -54,17 +49,18 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture)
 						m = picture.rows;
 					}
 				}
-				circle(maskedI, midpoints[k], 2, (0, 0, 255), 3);
+				circle(maskedI, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3);
 				if (keep) {
-					circle(picture, midpoints[k], 2, (0, 0, 255), 3); //Debug line
+					circle(picture, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3); //Debug line
 		 //assigning weight based on distance from that point to the two it is in between.
 					float dist1, dist2;
 					dist1 = sqrt((midpoints[k].x - keypoints[i].pt.x)*(midpoints[k].x - keypoints[i].pt.x) + (midpoints[k].y - keypoints[i].pt.y) *(midpoints[k].y - keypoints[i].pt.y)) - keypoints[i].size / 2;
 					dist2 = sqrt((midpoints[k].x - keypoints[j].pt.x)*(midpoints[k].x - keypoints[j].pt.x) + (midpoints[k].y - keypoints[j].pt.y)*(midpoints[k].y - keypoints[j].pt.y)) - keypoints[j].size / 2;
-					weight[i] = dist1 + dist2;// can add a distance 3 for the distance from the robot.
+					midpoints[k].z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
 											  //get the color at that point- if white then weight = zero. don't want it
 											  // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
 											  //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
+					slope[k] = (keypoints[i].pt.x - keypoints[j].pt.x) / (keypoints[j].pt.y - keypoints[i].pt.y);
 					k++;
 				}
 			}
@@ -77,15 +73,10 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture)
 }
 void pickFeatures(Mat bwdifferential, Mat &picture)
 {
-	char TrackbarName[50];
-	char TrackbarName2[50];
-	sprintf(TrackbarName, "minA %i", 300);
-	sprintf(TrackbarName2, "minD %i", 300);
-	namedWindow("Trackbars", WINDOW_GUI_EXPANDED);
-	createTrackbar(TrackbarName, "Trackbars", &minArea, 3000);
-	createTrackbar(TrackbarName2, "Trackbars", &minDistance, 3000);
 	vector< vector<Point> > contours;
 	vector<Vec4i> hierarchy;
+	vector<Point3f> midpoints;// change to point3f and get rid of the weight vector
+	vector<float> slope;
 	//parameters for the detectro to detect keypoints within the bwdifferential
 	SimpleBlobDetector::Params params;
 	//params.minThreshold = 10;
@@ -103,20 +94,16 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	//detect the keypoints within bwdifferential
 	Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
 	vector<KeyPoint> keypoints;
-	vector<int> weight;
 	detector->detect(bwdifferential, keypoints);
-	Mat maskedI, blacky;
+	Mat maskedI;
 	//create a black image for just the keypoints
 	bwdifferential.copyTo(maskedI);
 	threshold(maskedI, maskedI, 0, 0, THRESH_BINARY);//black image
 	//DEBUG
 	cvtColor(maskedI, maskedI, CV_GRAY2BGR);//lets colors be put onto it, will be able to cut out eventually
-maskedI.copyTo(blacky);// debuging
-	SortKeypoints(keypoints, maskedI, picture);
-
-	
-
-
+	midpoints.resize(keypoints.size()*keypoints.size());
+	slope.resize(keypoints.size()*keypoints.size());
+	SortKeypoints(keypoints, maskedI, picture,midpoints, slope);
 }
 
 void motionSearch(Mat bwdifferential, Mat &frame1)
