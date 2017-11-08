@@ -71,6 +71,12 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	imshow("blacky", picture);
 
 }
+void preferredOrdering(vector<Point3f> &midpoints, vector<float> slope)
+{
+	//need to take the slopes and compare to find the biggest slope and then put that point as the preferred point. maybe incorporate
+	//this into the z point for the weight... maybe trade that out for the slope for the weight, though it is kind of nice to have the 
+	// width of what space the robot has to traavel through. some kinds of percentages comaprison
+}
 void pickFeatures(Mat bwdifferential, Mat &picture)
 {
 	vector< vector<Point> > contours;
