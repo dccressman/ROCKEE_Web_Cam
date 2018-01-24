@@ -24,6 +24,10 @@ Mat edges;
 int minArea = 1000;
 int minDistance = 1000;
 
+float distance(Point p1, Point p2)
+{
+	return sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y) *(p1.y - p2.y));
+}
 void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints, vector<float> slope)
 {
 	int k = 0;
@@ -282,7 +286,7 @@ int main()
 			return -1;
 		}
 		if (video.read(frame1))*/
-		frame1 = imread("8.jpg");
+		frame1 = imread("6.jpg");
 		if (1)
 		{
 			// height =240
@@ -332,6 +336,9 @@ int main()
 			int areaMin = 21000;
 			int num = 2;
 			int Lc;
+			int longest=0;
+			float longdist = 0;
+			float dist = 0;
 			while (num != 1)
 			{
 				areaMin -= 100;
@@ -348,9 +355,23 @@ int main()
 			//rectangle makes it too big of a blocked area
 			//Rect topCut =boundingRect(contours[Lc]);
 			//rectangle(image, topCut, Scalar(255, 255, 255), -1);
-			approxPolyDP(contours[Lc], polygon, 100, true);
-			fillPoly(image, polygon, Scalar(255, 255, 255));
-
+			approxPolyDP(contours[Lc], polygon, 10, true);
+			for (int i = 0; i < (polygon.size() - 1); i++)
+			{
+				arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);
+				dist = distance(polygon[i], polygon[i + 1]);
+				if (dist > longdist)
+				{
+					longest = i;
+					longdist = dist;
+				}
+				//take the distance between the points, find longest line. this gives the y coordinate for cutoff, then the x coord determined
+				//from the rightmost extrema of the thing.  
+				// alternatively, if always does the same order, could draw a line from the rightmost point at the bottom to the point 
+				// of the longest line, then same from the left and crop everything above these 
+				// not sure if able to save this as a new image/ mat if you do this
+			}
+			arrowedLine(gray3, polygon[longest], polygon[longest+1], Scalar(255, 255, 255), 4);
 
 			//parameters for the detectro to detect keypoints within the bwdifferential
 			//SimpleBlobDetector::Params params;
