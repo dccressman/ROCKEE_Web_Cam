@@ -140,26 +140,28 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	
 	imshow("blacky2", picture);
 }
-
+//looks at the mat of the frame differences to mark which one is the robot that is moving
 void motionSearch(Mat bwdifferential, Mat &frame1)
 {
-	int threshold_value = 20;
+
+	
 	Mat temp;
 	bool objectExists = false;
+	// required for finding the contours which is doen by findContours
 	vector< vector<Point> > contours;
 	vector<Vec4i> hierarchy;
-	bwdifferential.copyTo(temp);
+	bwdifferential.copyTo(temp);// copied so that you don't have to worry about messing up the original
 	findContours(temp, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);// retrieves external contours
-	if (contours.size() > 0) {
-		objectExists = true;
+	if (contours.size() > 0) { // if contours are found (there are differences shown in bwdifferential)
+		objectExists = true; // there is an object that has moved
 		vector< vector<Point> > largestContourVec;
-		largestContourVec.push_back(contours.at(contours.size() - 1));
-		objectBoundingRectangle = boundingRect(largestContourVec.at(0));
-		theObject[0] = objectBoundingRectangle.x + objectBoundingRectangle.width / 2;
-		theObject[1] = objectBoundingRectangle.y + objectBoundingRectangle.height / 2;
+		largestContourVec.push_back(contours.at(contours.size() - 1));// sorting the contours so that you have the largest one
+		objectBoundingRectangle = boundingRect(largestContourVec.at(0)); // bounding the largest contour with a rectangle (box around the robot)
+		theObject[0] = objectBoundingRectangle.x + objectBoundingRectangle.width / 2; // setting the locations of the object middle X coord
+		theObject[1] = objectBoundingRectangle.y + objectBoundingRectangle.height / 2; // setting the locations of the object middle Y coord
 	}
-	drawContours(frame1, contours, -1, (0, 255, 0), 3);
-
+	drawContours(frame1, contours, -1, (0, 255, 0), 3);// draw the object contours on the frame
+	//Detect the main blob - largest contour based on area and the threshold difference
 	SimpleBlobDetector::Params params;
 	params.minThreshold = 10;
 	params.maxThreshold = 200;
@@ -213,16 +215,21 @@ int main()
 	{
 		vector<Vec4i> hierarchy;
 		vector< vector<Point> > contours;
+		// opening a video  and making sure it opened
 		//video.open("RMC.avi");
 		//if (!video.isOpened()) {
 		//	cout << "ERROR ACQUIRING VIDEO FEED\n";
 		//	getchar();
 		//	return -1;
 		//}
+
+		//reading through the video frames and taking them 2 at a time
 		//while (video.get(CV_CAP_PROP_POS_FRAMES) < (video.get(CV_CAP_PROP_FRAME_COUNT) - 1))
 		//{
+		//	// making sure could read both frames
 		//	if (video.read(frame1) && video.read(frame2))
 		//	{
+		//	//cropping the image to cut out the edges of the frame which had parts outside of the robot arena
 		//		int offset_x = 600;
 		//		int offset_y = 129;
 		//		Rect roi = Rect(offset_x, offset_y, 400, (frame1.size().height - offset_y * 2));
@@ -231,7 +238,7 @@ int main()
 		//		// convert color to grayscale
 		//		cvtColor(frame1, gray1, CV_RGB2GRAY);
 		//		cvtColor(frame2, gray2, CV_RGB2GRAY);
-		//		// look at the difference between images, must be in grayscale
+		//		// look at the difference between images, must be in grayscale- this would be the motion
 		//		absdiff(gray1, gray2, differential);
 		//		// turns this difference to black and white
 		//		threshold(differential, bwdifferential, threshold_value, 255, THRESH_BINARY);
@@ -242,6 +249,7 @@ int main()
 
 		//	}
 		//	motionSearch(bwdifferential, frame1);
+		// // displays the images for debugging purposes
 		//	imshow("Frame1", frame1);
 		//	imshow("threshold", bwdifferential);
 		//	
@@ -286,15 +294,17 @@ int main()
 			return -1;
 		}
 		if (video.read(frame1))*/
-		frame1 = imread("6.jpg");
+		frame1 = imread("46.jpg");
 		if (1)
 		{
 			// height =240
 			// width = 320
 
-			Mat gray3;
-			cvtColor(frame1, gray1, CV_RGB2GRAY);
-			gray1.copyTo(gray3);
+			Mat hsv1,gray3,cutImage;
+			cvtColor(frame1, gray3, CV_RGB2GRAY);
+			cvtColor(frame1, hsv1, CV_RGB2HSV);
+			imshow("hsv", hsv1);
+			gray3.copyTo(cutImage);
 			//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
 			//gray1 = gray1(roi);
 			//threshold(gray1, gray1, 40, 255, THRESH_BINARY);//111
@@ -333,7 +343,7 @@ int main()
 			vector< vector<Point> > contours;
 			vector<Point> polygon;
 			vector<Vec4i> hierarchy;
-			int areaMin = 21000;
+			int areaMin = 10000;
 			int num = 2;
 			int Lc;
 			int longest=0;
@@ -341,7 +351,7 @@ int main()
 			float dist = 0;
 			while (num != 1)
 			{
-				areaMin -= 100;
+				areaMin += 100;
 				num = 0;
 				findContours(image, contours, hierarchy, CV_RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
 				for (int i = 1;i < contours.size(); i++) {
@@ -358,7 +368,6 @@ int main()
 			approxPolyDP(contours[Lc], polygon, 10, true);
 			for (int i = 0; i < (polygon.size() - 1); i++)
 			{
-				arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);
 				dist = distance(polygon[i], polygon[i + 1]);
 				if (dist > longdist)
 				{
@@ -371,7 +380,14 @@ int main()
 				// of the longest line, then same from the left and crop everything above these 
 				// not sure if able to save this as a new image/ mat if you do this
 			}
+			arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);
 			arrowedLine(gray3, polygon[longest], polygon[longest+1], Scalar(255, 255, 255), 4);
+			
+			Rect cropping = Rect(0, polygon[longest].y, gray3.cols, (gray3.rows-polygon[longest].y));
+			cutImage = cutImage(cropping);
+
+			//adaptiveThreshold(cutImage, cutImage, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
+			adaptiveThreshold(cutImage, cutImage, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
 
 			//parameters for the detectro to detect keypoints within the bwdifferential
 			//SimpleBlobDetector::Params params;
@@ -394,6 +410,7 @@ int main()
 			//drawKeypoints(image, keypoints, image, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 			imshow("imshowing", gray3);
 			imshow("blockedOut", image);
+			imshow("cropped", cutImage);
 		}
 
 		switch (waitKey(10)) {
