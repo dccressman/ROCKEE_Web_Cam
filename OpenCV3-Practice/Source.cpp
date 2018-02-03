@@ -32,7 +32,6 @@ float distance(Point p1, Point p2)
 //crops the non-arena areas from the image passed to function
 void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3)
 {
-
 	vector< vector<Point> > contours;
 	vector<Point> polygon;
 	vector<Vec4i> hierarchy;
@@ -74,10 +73,10 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3)
 																							   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
 	cutImage = cutImage(cropping);// crops the image to be within the cropping rectangle
 
-
-	imshow("imshowing", gray3);
-	imshow("blockedOut", gray2);
-	imshow("cropped", cutImage);
+	//DEBUG
+	imshow("imshowing", gray3);//DEBUG
+	imshow("blockedOut", gray2);//DEBUG
+	imshow("cropped", cutImage);//DEBUG
 
 }
 //sorts the input of keypoints to pick out the robot path
@@ -169,8 +168,8 @@ void preferredOrdering(vector<Point3f> &midpoints, vector<float> &slope, Mat &Ag
 // Handles the filtering to form the keypoints within the picture and make them into keyfeatures. Calls functions for 
 void pickFeatures(Mat bwdifferential, Mat &picture)
 {
-	vector< vector<Point> > contours;
-	vector<Vec4i> hierarchy;
+	vector< vector<Point> > contours;//Do I need?
+	vector<Vec4i> hierarchy; // Do I need?
 	vector<Point3f> midpoints;// change to point3f and get rid of the weight vector
 	vector<float> slope;
 	//parameters for the detectro to detect keypoints within the bwdifferential
@@ -281,9 +280,9 @@ int main()
 	Mat medianBlurred, OrangeCrop, OrangeCrop2;
 	while (1)
 	{
-		vector<Vec4i> hierarchy;
-		vector< vector<Point> > contours;
+
 		//MOTION SEARCH START
+
 		// opening a video  and making sure it opened
 		//video.open("RMC.avi");
 		//if (!video.isOpened()) {
@@ -321,7 +320,8 @@ int main()
 		// // displays the images for debugging purposes
 		//	imshow("Frame1", frame1);
 		//	imshow("threshold", bwdifferential);
-		//	
+		//
+
 		//MOTION SEARCH END
 
 		//FILTERING ORANGE START
@@ -368,15 +368,13 @@ int main()
 		if (video.read(frame1))*/
 
 		frame1 = imread("46.jpg");
-		if (1)
-		{
 			// height =240
 			// width = 320
 
-			Mat hsv1,gray3,cutImage;
-			cvtColor(frame1, gray3, CV_RGB2GRAY);
-			cvtColor(frame1, hsv1, CV_RGB2HSV);
-			imshow("hsv", hsv1);
+			Mat hsv1,hsv1Thresh,gray3,cutImage;
+			cvtColor(frame1, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
+			cvtColor(frame1, hsv1, CV_BGR2HSV);
+			
 			gray3.copyTo(cutImage);
 			//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
 			//gray1 = gray1(roi);
@@ -397,10 +395,33 @@ int main()
 			//pickFeatures(medianBlurred, gray3);
 			
 			//CROPPING OUT NON_ARENA
-			CropNonArena(cutImage, gray2, gray3);// may not need to pass all of these by reference in the future... but also may
 
+			CropNonArena(cutImage, gray2, gray3);// may not need to pass all of these by reference in the future... but also may
 			
-		}
+
+			//HSV THRESHOLDING FOR OBSTACLE AREA
+			inRange(hsv1, Scalar(0, 10, 10), Scalar(40, 255, 255), hsv1Thresh);// hardcoded values- will be doing some soft coded values in actuality if this works Orange HSV estimated are (30, 100%, 100%)
+			vector< vector<Point> > contours;
+			vector<Vec4i> hierarchy;
+			vector<Point>goodPoints;
+			//looks for contours within the thresholded hsv image
+			findContours(hsv1Thresh, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));
+			for (int i = 1; i< contours.size(); i++)
+			{
+				if (contourArea(contours.at(i)) > 20)// takes thes contours and turns them into a vector of points with area limit to disregard the throwaways
+				{
+						goodPoints.push_back(contours.at(i).at(1)); // takes only the first point of thecontour
+				}
+			}
+			Rect obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
+			obstacleArea.x=0;// extending the bounding rectangle to fit the width of the image
+			obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
+			rectangle(hsv1, obstacleArea, Scalar(0, 0, 0), 2);// DEBUG
+
+			imshow("thresholded", hsv1Thresh);//DEBUG
+			imshow("hsv", hsv1);//DEBUG
+			
+		
 
 		switch (waitKey(10)) {
 		case 27: //'esc' key has been pressed, exit program.
