@@ -30,7 +30,7 @@ float distance(Point p1, Point p2)
 	return sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y) *(p1.y - p2.y));
 }
 //crops the non-arena areas from the image passed to function
-void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3)
+void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3, int &topCrop)
 {
 	vector< vector<Point> > contours;
 	vector<Point> polygon;
@@ -68,16 +68,51 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3)
 	}
 	arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);//DEBUG
 	arrowedLine(gray3, polygon[longest], polygon[longest + 1], Scalar(255, 255, 255), 4);//DEBUG
-
-	Rect cropping = Rect(0, polygon[longest].y, gray3.cols, (gray3.rows - polygon[longest].y));// cropping rectangle- based on the location of the longest polygon length. 
+	topCrop = gray3.rows - polygon[longest].y;
+	Rect cropping = Rect(0, polygon[longest].y, gray3.cols, topCrop);// cropping rectangle- based on the location of the longest polygon length. 
 																							   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
 	cutImage = cutImage(cropping);// crops the image to be within the cropping rectangle
+	
 
 	//DEBUG
-	imshow("imshowing", gray3);//DEBUG
-	imshow("blockedOut", gray2);//DEBUG
-	imshow("cropped", cutImage);//DEBUG
+	//imshow("imshowing", gray3);//DEBUG
+	//imshow("blockedOut", gray2);//DEBUG
+	//imshow("cropped", cutImage);//DEBUG
 
+}
+//crops out the obstacleArea to make robot path determination better
+void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
+{
+	Mat hsv1Thresh;
+	vector< vector<Point> > contours;
+	vector<Vec4i> hierarchy;
+	vector<Point>goodPoints;
+
+	inRange(hsv1, Scalar(0, 10, 10), Scalar(40, 255, 255), hsv1Thresh);// hardcoded values- will be doing some soft coded values in actuality if this works Orange HSV estimated are (30, 100%, 100%)
+
+																	   //looks for contours within the thresholded hsv image
+	findContours(hsv1Thresh, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));
+	for (int i = 1; i< contours.size(); i++)
+	{
+		if (contourArea(contours.at(i)) > 20)// takes thes contours and turns them into a vector of points with area limit to disregard the throwaways
+		{
+			goodPoints.push_back(contours.at(i).at(1)); // takes only the first point of thecontour
+		}
+	}
+	Rect obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
+	obstacleArea.x = 0;// extending the bounding rectangle to fit the width of the image
+	obstacleArea.height -= 7;//offsets for limits within the code
+	obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
+	topCrop = obstacleArea.y+obstacleArea.height;
+	bottomCrop = obstacleArea.y;
+	rectangle(hsv1, obstacleArea, Scalar(0, 0, 0), 2);// DEBUG
+	
+	croppingObst = croppingObst(obstacleArea);
+	adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
+	//adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
+
+	imshow("thresholded", croppingObst);//DEBUG
+	imshow("hsv", hsv1);//DEBUG
 }
 //sorts the input of keypoints to pick out the robot path
 void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints, vector<float> slope)
@@ -177,8 +212,8 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	//params.minThreshold = 10;
 	//params.maxThreshold = 200;
 	params.filterByArea = true;
-	params.minArea = 604;
-	params.maxArea = 1800;
+	params.minArea = (bwdifferential.rows/8);
+	params.maxArea = (bwdifferential.cols/2);
 	//params.minDistBetweenBlobs =  minDistance;
 	params.filterByCircularity = false;
 	params.filterByColor = false;
@@ -199,7 +234,7 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 
 	midpoints.resize(keypoints.size()*keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two
 	slope.resize(keypoints.size()*keypoints.size()); // same as midpoints
-	SortKeypoints(keypoints, maskedI, picture,midpoints, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
+	SortKeypoints(keypoints, maskedI, picture, midpoints, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
 	preferredOrdering(midpoints,slope,Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible
 	
 	
@@ -371,21 +406,19 @@ int main()
 			// height =240
 			// width = 320
 
-			Mat hsv1,hsv1Thresh,gray3,cutImage;
+			Mat hsv1,gray3, croppingObst, grayHold;
+			int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
+			
 			cvtColor(frame1, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
 			cvtColor(frame1, hsv1, CV_BGR2HSV);
-			
-			gray3.copyTo(cutImage);
-			//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
-			//gray1 = gray1(roi);
-			//threshold(gray1, gray1, 40, 255, THRESH_BINARY);//111
+
 			adaptiveThreshold(gray3, medianBlurred, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
 			adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
-			Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
-			//gray1 = gray1(roi);
-			cvtColor(gray2, gray2, CV_GRAY2BGR);
-			cvtColor(gray2, gray2, CV_BGR2GRAY);
-			//findContours(gray3, gray3,hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+			//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
+
+			//cvtColor(gray2, gray2, CV_GRAY2BGR);
+			//cvtColor(gray2, gray2, CV_BGR2GRAY);
+
 			//pickFeatures(medianBlurred, gray3);
 			//imshow("Frame1", frame1);
 			//imshow("Gray", gray1);
@@ -395,32 +428,17 @@ int main()
 			//pickFeatures(medianBlurred, gray3);
 			
 			//CROPPING OUT NON_ARENA
-
-			CropNonArena(cutImage, gray2, gray3);// may not need to pass all of these by reference in the future... but also may
+			CropNonArena(hsv1, gray2, gray3,cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
+			cvtColor(hsv1, croppingObst, CV_HSV2BGR);
+			cvtColor(croppingObst, croppingObst,CV_BGR2GRAY);
+			croppingObst.copyTo(grayHold);
 			
-
 			//HSV THRESHOLDING FOR OBSTACLE AREA
-			inRange(hsv1, Scalar(0, 10, 10), Scalar(40, 255, 255), hsv1Thresh);// hardcoded values- will be doing some soft coded values in actuality if this works Orange HSV estimated are (30, 100%, 100%)
-			vector< vector<Point> > contours;
-			vector<Vec4i> hierarchy;
-			vector<Point>goodPoints;
-			//looks for contours within the thresholded hsv image
-			findContours(hsv1Thresh, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));
-			for (int i = 1; i< contours.size(); i++)
-			{
-				if (contourArea(contours.at(i)) > 20)// takes thes contours and turns them into a vector of points with area limit to disregard the throwaways
-				{
-						goodPoints.push_back(contours.at(i).at(1)); // takes only the first point of thecontour
-				}
-			}
-			Rect obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
-			obstacleArea.x=0;// extending the bounding rectangle to fit the width of the image
-			obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
-			rectangle(hsv1, obstacleArea, Scalar(0, 0, 0), 2);// DEBUG
-
-			imshow("thresholded", hsv1Thresh);//DEBUG
-			imshow("hsv", hsv1);//DEBUG
+			ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
+			grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
 			
+			//FEATURE SELECTION
+			pickFeatures(croppingObst, grayHold);
 		
 
 		switch (waitKey(10)) {
