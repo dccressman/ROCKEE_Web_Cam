@@ -29,6 +29,57 @@ float distance(Point p1, Point p2)
 {
 	return sqrt((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y) *(p1.y - p2.y));
 }
+//crops the non-arena areas from the image passed to function
+void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3)
+{
+
+	vector< vector<Point> > contours;
+	vector<Point> polygon;
+	vector<Vec4i> hierarchy;
+	int Lc = 0;
+	int longest = 0;
+	float longdist = 0;
+	float dist = 0;
+	// finding the largest contour in the image- should be the top part that it is desired to crop out( right now thisi s the roof of the tent, will need to check at competition to see how it reacts there.
+	findContours(gray2, contours, hierarchy, CV_RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+	for (int i = 1;i < contours.size(); i++) {//scrolls through the contour list
+		if (contourArea(contours.at(i))>contourArea(contours.at(Lc))) {//determines the contour that has the largest area
+			Lc = i;
+		}
+	}
+	drawContours(gray3, contours, Lc, Scalar(255, 255, 0), 1, 8, hierarchy, 0, Point(0, 0));//DEBUG
+																							//rectangle makes it too big of a blocked area
+																							//Rect topCut =boundingRect(contours[Lc]);
+																							//rectangle(image, topCut, Scalar(255, 255, 255), -1);
+
+	approxPolyDP(contours[Lc], polygon, 10, true); // approximate polygon of the largest contour
+	for (int i = 0; i < (polygon.size() - 1); i++)// scroling through the sides of the polygon
+	{
+		dist = distance(polygon[i], polygon[i + 1]);
+		if (dist > longdist)//picking the longest distance- should be a good cropping point in the back of the arena- so far has worked for all pictures, may need to update for an actual arena
+		{
+			longest = i;
+			longdist = dist;
+		}
+		//take the distance between the points, find longest line. this gives the y coordinate for cutoff, then the x coord determined
+		//from the rightmost extrema of the thing.  
+		// alternatively, if always does the same order, could draw a line from the rightmost point at the bottom to the point 
+		// of the longest line, then same from the left and crop everything above these 
+		// not sure if able to save this as a new image/ mat if you do this
+	}
+	arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);//DEBUG
+	arrowedLine(gray3, polygon[longest], polygon[longest + 1], Scalar(255, 255, 255), 4);//DEBUG
+
+	Rect cropping = Rect(0, polygon[longest].y, gray3.cols, (gray3.rows - polygon[longest].y));// cropping rectangle- based on the location of the longest polygon length. 
+																							   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
+	cutImage = cutImage(cropping);// crops the image to be within the cropping rectangle
+
+
+	imshow("imshowing", gray3);
+	imshow("blockedOut", gray2);
+	imshow("cropped", cutImage);
+
+}
 //sorts the input of keypoints to pick out the robot path
 void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints, vector<float> slope)
 {
@@ -232,6 +283,7 @@ int main()
 	{
 		vector<Vec4i> hierarchy;
 		vector< vector<Point> > contours;
+		//MOTION SEARCH START
 		// opening a video  and making sure it opened
 		//video.open("RMC.avi");
 		//if (!video.isOpened()) {
@@ -270,8 +322,9 @@ int main()
 		//	imshow("Frame1", frame1);
 		//	imshow("threshold", bwdifferential);
 		//	
+		//MOTION SEARCH END
 
-		//image filtering the Orange
+		//FILTERING ORANGE START
 		/*OrangeCrop = imread("OPT.bmp");
 		if (OrangeCrop.data == 0)
 		{
@@ -304,6 +357,8 @@ int main()
 		//thresholding the RGB image
 		imshow("Orange3", OrangeCrop);*/
 
+		//FILTERING ORANGE END
+
 	/*	video.open("dirts.avi");
 		if (!video.isOpened()) {
 			cout << "ERROR ACQUIRING VIDEO FEED\n";
@@ -311,6 +366,7 @@ int main()
 			return -1;
 		}
 		if (video.read(frame1))*/
+
 		frame1 = imread("46.jpg");
 		if (1)
 		{
@@ -339,95 +395,11 @@ int main()
 			//imshow("BW", gray2);
 			//imshow("AdaptiveThreshold", medianBlurred);
 			//pickFeatures(medianBlurred, gray3);
-			Mat image;
-			gray2.copyTo(image);
-			//int threshold1 = 0, threshold2 = 0, threshold3 = 0, threshold4 = 0, threshold5 = 0, threshold6 = 0;
-	/*		char TrackbarName3[50], TrackbarName32[50], TrackbarName31[50], TrackbarName34[50], TrackbarName35[50], TrackbarName36[50];
-			sprintf(TrackbarName3, "1L %i", 1000000);
-			sprintf(TrackbarName32, "2L %i", 1000000);
-			sprintf(TrackbarName31, "3L %i", 255);
-			sprintf(TrackbarName34, "1H %i", 255);
-			sprintf(TrackbarName35, "2H %i", 255);
-			sprintf(TrackbarName36, "3H %i", 255);
-			namedWindow("Trackbars", WINDOW_GUI_EXPANDED);
-			createTrackbar(TrackbarName3, "Trackbars", &threshold1, 600000);
-			createTrackbar(TrackbarName32, "Trackbars", &threshold2, 600000);
-			createTrackbar(TrackbarName31, "Trackbars", &threshold3, 255);
-			createTrackbar(TrackbarName34, "Trackbars", &threshold4, 255);
-			createTrackbar(TrackbarName35, "Trackbars", &threshold5, 255);
-			createTrackbar(TrackbarName36, "Trackbars", &threshold6, 255);*/
-
-			vector< vector<Point> > contours;
-			vector<Point> polygon;
-			vector<Vec4i> hierarchy;
-			int areaMin = 10000;
-			int num = 2;
-			int Lc;
-			int longest=0;
-			float longdist = 0;
-			float dist = 0;
-			while (num != 1)
-			{
-				areaMin += 100;
-				num = 0;
-				findContours(image, contours, hierarchy, CV_RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
-				for (int i = 1;i < contours.size(); i++) {
-					if (contourArea(contours.at(i))>areaMin) {
-						drawContours(gray3, contours, i, Scalar(255, 255, 0), 1, 8, hierarchy, 0, Point(0, 0));
-						num++;
-						Lc = i;
-					}
-				}
-			}
-			//rectangle makes it too big of a blocked area
-			//Rect topCut =boundingRect(contours[Lc]);
-			//rectangle(image, topCut, Scalar(255, 255, 255), -1);
-			approxPolyDP(contours[Lc], polygon, 10, true);
-			for (int i = 0; i < (polygon.size() - 1); i++)
-			{
-				dist = distance(polygon[i], polygon[i + 1]);
-				if (dist > longdist)
-				{
-					longest = i;
-					longdist = dist;
-				}
-				//take the distance between the points, find longest line. this gives the y coordinate for cutoff, then the x coord determined
-				//from the rightmost extrema of the thing.  
-				// alternatively, if always does the same order, could draw a line from the rightmost point at the bottom to the point 
-				// of the longest line, then same from the left and crop everything above these 
-				// not sure if able to save this as a new image/ mat if you do this
-			}
-			arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);
-			arrowedLine(gray3, polygon[longest], polygon[longest+1], Scalar(255, 255, 255), 4);
 			
-			Rect cropping = Rect(0, polygon[longest].y, gray3.cols, (gray3.rows-polygon[longest].y));
-			cutImage = cutImage(cropping);
+			//CROPPING OUT NON_ARENA
+			CropNonArena(cutImage, gray2, gray3);// may not need to pass all of these by reference in the future... but also may
 
-			//adaptiveThreshold(cutImage, cutImage, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
-			adaptiveThreshold(cutImage, cutImage, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
-
-			//parameters for the detectro to detect keypoints within the bwdifferential
-			//SimpleBlobDetector::Params params;
-			////params.minThreshold = 10;
-			////params.maxThreshold = 200;
-			//params.filterByArea = true;
-			//params.minArea = 200000;//threshold1;
-			//params.maxArea = 20000000;//threshold2;
-			////params.minDistBetweenBlobs =  minDistance;
-			//params.filterByCircularity = false;
-			//params.filterByColor = false;
-			//params.filterByConvexity = false;
-			////params.minConvexity = 0.8;
-			//params.filterByInertia = true;
-			//params.minInertiaRatio = float(0.05);
-			////detect the keypoints within bwdifferential
-			//Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
-			//vector<KeyPoint> keypoints;
-			//detector->detect(image, keypoints);
-			//drawKeypoints(image, keypoints, image, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-			imshow("imshowing", gray3);
-			imshow("blockedOut", image);
-			imshow("cropped", cutImage);
+			
 		}
 
 		switch (waitKey(10)) {
