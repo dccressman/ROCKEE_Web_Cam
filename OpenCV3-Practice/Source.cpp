@@ -101,7 +101,7 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	}
 	Rect obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
 	obstacleArea.x = 0;// extending the bounding rectangle to fit the width of the image
-	obstacleArea.height -= 7;//offsets for limits within the code
+	obstacleArea.height -= 9;//offsets for limits within the code
 	obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
 	topCrop = obstacleArea.y+obstacleArea.height;
 	bottomCrop = obstacleArea.y;
@@ -115,6 +115,46 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	imshow("hsv", hsv1);//DEBUG
 }
 //sorts the input of keypoints to pick out the robot path
+bool GoodKeypoint(Mat &maskedI, Mat &picture,KeyPoint &keyP1, KeyPoint &keyP2, Point3f &checkPoint)
+{ 
+	bool keep = true;
+	Vec3b color = maskedI.at<Vec3b>(Point(checkPoint.x, checkPoint.y));
+	//if the area is black- not in the middle of another keyfeature, keep going
+	if (color[0] == 0)
+	{
+		//checking the midpoints to see if they are in the same line (vertical) as a keyfeature- this would make it undriveable by the robot without running into another keyfeature
+		// need to check the entire row bc if there is a thing in the way going forward or backwards its going to be an issue... want a straight line amap
+		for (int m = 0; m < picture.rows; m++) {
+			keep = true;
+			Vec3b circlecheck = maskedI.at<Vec3b>(Point(checkPoint.x, m));
+			if ((circlecheck.val[0] + circlecheck.val[1] + circlecheck.val[2]) > 0)// this is the color vector, searching if it is black, basically
+			{
+				//keep = false;
+				m = picture.rows;
+			}
+		}
+		// draw keypoints if they are not in keyfeature- DEBUGGING PURPOSES
+		//circle(maskedI, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3);
+		if (keep) {// if midpoint is "driveable" by robot- "driveable" means not in another keyfeature, not inline with a keyfeature
+			circle(picture, Point2f(checkPoint.x, checkPoint.y), 2, (0, 0, 255), 3); //DEBUG- visualizing the driveable points
+
+																						 //assigning weight based on distance from that point to the two it is in between. Helping to pick the best points
+			float dist1, dist2;
+			dist1 = sqrt((checkPoint.x - keyP1.pt.x)*(checkPoint.x - keyP1.pt.x) + (checkPoint.y - keyP1.pt.y) *(checkPoint.y - keyP1.pt.y)) - keyP1.size / 2;
+			dist2 = sqrt((checkPoint.x - keyP2.pt.x)*(checkPoint.x - keyP2.pt.x) + (checkPoint.y - keyP2.pt.y)*(checkPoint.y - keyP2.pt.y)) - keyP2.size / 2;
+			checkPoint.z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
+										   //get the color at that point- if white then weight = zero. don't want it
+										   // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
+										   //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
+
+										   // looking at the verticality of the path of the robot- the more vertical the slope is, the better the robot's path of travel.
+			
+			
+		}
+	}
+	return keep;
+
+}
 void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints, vector<float> slope)
 {
 	int k = 0;
@@ -129,45 +169,70 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	// see if there is a way to only look between adjacent keyfeatures... may not be possible depending
 	for (int i = 0; i < keypoints.size(); i++)
 	{
+		// from the keypoint to the one wall
+		midpoints[k].x = keypoints[i].pt.x / 2;
+		midpoints[k].y = keypoints[i].pt.y;
+		if (GoodKeypoint(maskedI, picture, keypoints[i], KeyPoint(Point2f(0,midpoints[k].y),0), midpoints[k]))
+		{
+
+			slope[k] = 1000;
+			k++;
+		}
+		midpoints[k].y = keypoints[i].pt.y;
+		midpoints[k].x = (maskedI.cols - keypoints[i].pt.x) / 2;
+		if (GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), 0),midpoints[k].y, midpoints[k]))
+		{
+
+			slope[k] = 1000;
+			k++;
+		}
+
 		for (int j = i + 1;j < keypoints.size(); j++) {
 			//calc midpoints
 			midpoints[k].x = (keypoints[i].pt.x + keypoints[j].pt.x) / 2;
 			midpoints[k].y = (keypoints[i].pt.y + keypoints[j].pt.y) / 2;
-			//checks the color of the midpoint
-			Vec3b color = maskedI.at<Vec3b>(Point(midpoints[k].x, midpoints[k].y));
-			keep = true;
-			//if the area is black- not in the middle of another keyfeature, keep going
-			if (color[0] == 0)
-			{   
-				//checking the midpoints to see if they are in the same line (vertical) as a keyfeature- this would make it undriveable by the robot without running into another keyfeature
-				for (int m = midpoints[k].y; m < picture.rows; m++) {
-					keep = true;
-					Vec3b circlecheck = maskedI.at<Vec3b>(Point(midpoints[k].x, m));
-					if ((circlecheck.val[0] + circlecheck.val[1] + circlecheck.val[2]) > 0)// this is the color vector, searching if it is black, basically
-					{
-						keep = false;
-						m = picture.rows;
-					}
-				}
-				// draw keypoints if they are not in keyfeature- DEBUGGING PURPOSES
-				circle(maskedI, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3);
-				if (keep) {// if midpoint is "driveable" by robot- "driveable" means not in another keyfeature, not inline with a keyfeature
-					circle(picture, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3); //DEBUG- visualizing the driveable points
-					
-					//assigning weight based on distance from that point to the two it is in between. Helping to pick the best points
-					float dist1, dist2;
-					dist1 = sqrt((midpoints[k].x - keypoints[i].pt.x)*(midpoints[k].x - keypoints[i].pt.x) + (midpoints[k].y - keypoints[i].pt.y) *(midpoints[k].y - keypoints[i].pt.y)) - keypoints[i].size / 2;
-					dist2 = sqrt((midpoints[k].x - keypoints[j].pt.x)*(midpoints[k].x - keypoints[j].pt.x) + (midpoints[k].y - keypoints[j].pt.y)*(midpoints[k].y - keypoints[j].pt.y)) - keypoints[j].size / 2;
-					midpoints[k].z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
-											  //get the color at that point- if white then weight = zero. don't want it
-											  // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
-											  //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
-					
-        			  // looking at the verticality of the path of the robot- the more vertical the slope is, the better the robot's path of travel.
-					slope[k] = (keypoints[i].pt.x - keypoints[j].pt.x) / (keypoints[j].pt.y - keypoints[i].pt.y);
-					k++;
-				}
+			if (GoodKeypoint(maskedI, picture, keypoints[i], keypoints[j], midpoints[k]))
+			{
+			
+			slope[k] = (keypoints[i].pt.x - keypoints[j].pt.x) / (keypoints[j].pt.y - keypoints[i].pt.y);
+			k++;
 			}
+			//checks the color of the midpoint
+			//Vec3b color = maskedI.at<Vec3b>(Point(midpoints[k].x, midpoints[k].y));
+			//keep = true;
+			////if the area is black- not in the middle of another keyfeature, keep going
+			//if (color[0] == 0)
+			//{   
+			//	//checking the midpoints to see if they are in the same line (vertical) as a keyfeature- this would make it undriveable by the robot without running into another keyfeature
+			//	// need to check the entire row bc if there is a thing in the way going forward or backwards its going to be an issue... want a straight line amap
+			//	for (int m = 0; m < picture.rows; m++) {
+			//		keep = true;
+			//		Vec3b circlecheck = maskedI.at<Vec3b>(Point(midpoints[k].x, m));
+			//		if ((circlecheck.val[0] + circlecheck.val[1] + circlecheck.val[2]) > 0)// this is the color vector, searching if it is black, basically
+			//		{
+			//			//keep = false;
+			//			m = picture.rows;
+			//		}
+			//	}
+			//	// draw keypoints if they are not in keyfeature- DEBUGGING PURPOSES
+			//	//circle(maskedI, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3);
+			//	if (keep) {// if midpoint is "driveable" by robot- "driveable" means not in another keyfeature, not inline with a keyfeature
+			//		circle(picture, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3); //DEBUG- visualizing the driveable points
+			//		
+			//		//assigning weight based on distance from that point to the two it is in between. Helping to pick the best points
+			//		float dist1, dist2;
+			//		dist1 = sqrt((midpoints[k].x - keypoints[i].pt.x)*(midpoints[k].x - keypoints[i].pt.x) + (midpoints[k].y - keypoints[i].pt.y) *(midpoints[k].y - keypoints[i].pt.y)) - keypoints[i].size / 2;
+			//		dist2 = sqrt((midpoints[k].x - keypoints[j].pt.x)*(midpoints[k].x - keypoints[j].pt.x) + (midpoints[k].y - keypoints[j].pt.y)*(midpoints[k].y - keypoints[j].pt.y)) - keypoints[j].size / 2;
+			//		midpoints[k].z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
+			//								  //get the color at that point- if white then weight = zero. don't want it
+			//								  // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
+			//								  //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
+			//		
+   //     			  // looking at the verticality of the path of the robot- the more vertical the slope is, the better the robot's path of travel.
+			//		slope[k] = (keypoints[i].pt.x - keypoints[j].pt.x) / (keypoints[j].pt.y - keypoints[i].pt.y);
+			//		k++;
+			//	}
+			//}
 		}
 	}
 	//DEBUG
@@ -203,6 +268,10 @@ void preferredOrdering(vector<Point3f> &midpoints, vector<float> &slope, Mat &Ag
 // Handles the filtering to form the keypoints within the picture and make them into keyfeatures. Calls functions for 
 void pickFeatures(Mat bwdifferential, Mat &picture)
 {
+	// opening the image (erosion then dilation to reduce noise)
+	//Kernel size is the square of pixels that you are comparing to see if should be white or not... see http://aishack.in/tutorials/mathematical-morphology/
+	morphologyEx(bwdifferential, bwdifferential, MORPH_OPEN, getStructuringElement(MORPH_ELLIPSE, Size(bwdifferential.rows / 15, bwdifferential.rows / 15)));//Test and make sure that this works the best it can across multiple views and set ups
+	imshow("bw2", bwdifferential);//DEBUG?
 	vector< vector<Point> > contours;//Do I need?
 	vector<Vec4i> hierarchy; // Do I need?
 	vector<Point3f> midpoints;// change to point3f and get rid of the weight vector
@@ -212,15 +281,16 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	//params.minThreshold = 10;
 	//params.maxThreshold = 200;
 	params.filterByArea = true;
-	params.minArea = (bwdifferential.rows/8);
-	params.maxArea = (bwdifferential.cols/2);
-	//params.minDistBetweenBlobs =  minDistance;
+	params.minArea = (bwdifferential.rows/1.1);
+	//params.maxArea = (bwdifferential.cols*bwdifferential.rows);
+	params.minDistBetweenBlobs = bwdifferential.rows*0.3;//minDistance;
 	params.filterByCircularity = false;
-	params.filterByColor = false;
+	params.filterByColor = true;
+	params.blobColor=255;
 	params.filterByConvexity = false;
 	//params.minConvexity = 0.8;
-	params.filterByInertia = true;
-	params.minInertiaRatio = float(0.05);
+	params.filterByInertia = false;
+	//params.minInertiaRatio = float(0.05);
 	//detect the keypoints within bwdifferential
 	Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
 	vector<KeyPoint> keypoints;
@@ -231,13 +301,13 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	picture.copyTo(Again);
 	threshold(maskedI, maskedI, 0, 0, THRESH_BINARY);//black image
 	cvtColor(maskedI, maskedI, CV_GRAY2BGR);//lets colors be put onto it, will be able to cut out eventually, DEBUG
-
-	midpoints.resize(keypoints.size()*keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two
-	slope.resize(keypoints.size()*keypoints.size()); // same as midpoints
+	drawKeypoints(bwdifferential, keypoints, bwdifferential, (255, 255, 0));
+	midpoints.resize(keypoints.size()*keypoints.size()+2* keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two plus one from the point to each wall
+	slope.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // same as midpoints
 	SortKeypoints(keypoints, maskedI, picture, midpoints, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
 	preferredOrdering(midpoints,slope,Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible
 	
-	
+	imshow("kp", bwdifferential); // DEBUG
 	imshow("blacky2", picture);//DEBUG?
 }
 //looks at the mat of the frame differences to mark which one is the robot that is moving
@@ -412,7 +482,7 @@ int main()
 			cvtColor(frame1, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
 			cvtColor(frame1, hsv1, CV_BGR2HSV);
 
-			adaptiveThreshold(gray3, medianBlurred, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
+			//adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
 			adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
 			//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
 
