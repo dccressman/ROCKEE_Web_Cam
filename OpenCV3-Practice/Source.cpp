@@ -72,7 +72,7 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3, int &topCrop)
 	Rect cropping = Rect(0, polygon[longest].y, gray3.cols, topCrop);// cropping rectangle- based on the location of the longest polygon length. 
 																							   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
 	cutImage = cutImage(cropping);// crops the image to be within the cropping rectangle
-	
+
 
 	//DEBUG
 	//imshow("imshowing", gray3);//DEBUG
@@ -92,7 +92,7 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 
 																	   //looks for contours within the thresholded hsv image
 	findContours(hsv1Thresh, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));
-	for (int i = 1; i< contours.size(); i++)
+	for (int i = 1; i < contours.size(); i++)
 	{
 		if (contourArea(contours.at(i)) > 20)// takes thes contours and turns them into a vector of points with area limit to disregard the throwaways
 		{
@@ -103,10 +103,10 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	obstacleArea.x = 0;// extending the bounding rectangle to fit the width of the image
 	obstacleArea.height -= 9;//offsets for limits within the code
 	obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
-	topCrop = obstacleArea.y+obstacleArea.height;
+	topCrop = obstacleArea.y + obstacleArea.height;
 	bottomCrop = obstacleArea.y;
 	rectangle(hsv1, obstacleArea, Scalar(0, 0, 0), 2);// DEBUG
-	
+
 	croppingObst = croppingObst(obstacleArea);
 	adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
 	//adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
@@ -116,57 +116,56 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 }
 //sorts the input of keypoints to pick out the robot path
 //may need updated to simplify since the keypoints are going to be sorted, may be able to ignore completely
-bool GoodKeypoint(Mat &maskedI, Mat &picture,KeyPoint &keyP1, KeyPoint &keyP2, Point3f &checkPoint)
-{ 
-	
+bool GoodKeypoint(Mat &maskedI, Mat &picture, KeyPoint &keyP1, KeyPoint &keyP2, Point3f &checkPoint)
+{
 	bool keep = true;
 	//Vec3b color = maskedI.at<Vec3b>(Point(checkPoint.x, checkPoint.y));
 	////if the area is black- not in the middle of another keyfeature, keep going
 	//if (color[0] == 0)
 	//{
 
-		if (checkPoint.x < (picture.rows*2 - checkPoint.y))// accounting for the trapezoidal wall cutoff in the image... place the robot can't go
-			return false;
-		//checking the midpoints to see if they are in the same line (vertical) as a keyfeature- this would make it undriveable by the robot without running into another keyfeature
-		// need to check the entire row bc if there is a thing in the way going forward or backwards its going to be an issue... want a straight line amap
-		//for (int m = 0; m < picture.rows; m++) {
-		//	Vec3b circlecheck = maskedI.at<Vec3b>(Point(checkPoint.x, m));
-		//	if ((circlecheck.val[0] + circlecheck.val[1] + circlecheck.val[2]) > 0)// this is the color vector, searching if it is black, basically
-		//	{
-		//		return false;
-		//		m = picture.rows;
-		//	}
-		//}
-		// draw keypoints if they are not in keyfeature- DEBUGGING PURPOSES
-		//circle(maskedI, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3);
-		// if midpoint is "driveable" by robot- "driveable" means not in another keyfeature, not inline with a keyfeature
-			circle(picture, Point2f(checkPoint.x, checkPoint.y), 2, (0, 0, 255), 3); //DEBUG- visualizing the driveable points
+	if (checkPoint.x < (picture.rows * 2 - checkPoint.y))// accounting for the trapezoidal wall cutoff in the image... place the robot can't go
+		return false;
+	//checking the midpoints to see if they are in the same line (vertical) as a keyfeature- this would make it undriveable by the robot without running into another keyfeature
+	// need to check the entire row bc if there is a thing in the way going forward or backwards its going to be an issue... want a straight line amap
+	//for (int m = 0; m < picture.rows; m++) {
+	//	Vec3b circlecheck = maskedI.at<Vec3b>(Point(checkPoint.x, m));
+	//	if ((circlecheck.val[0] + circlecheck.val[1] + circlecheck.val[2]) > 0)// this is the color vector, searching if it is black, basically
+	//	{
+	//		return false;
+	//		m = picture.rows;
+	//	}
+	//}
+	// draw keypoints if they are not in keyfeature- DEBUGGING PURPOSES
+	//circle(maskedI, Point2f(midpoints[k].x, midpoints[k].y), 2, (0, 0, 255), 3);
+	// if midpoint is "driveable" by robot- "driveable" means not in another keyfeature, not inline with a keyfeature
+	circle(picture, Point2f(checkPoint.x, checkPoint.y), 2, (0, 0, 255), 3); //DEBUG- visualizing the driveable points
 
-			//assigning weight based on distance from that point to the two it is in between. Helping to pick the best points
-			float dist1, dist2;
-			dist1 = sqrt((checkPoint.x - keyP1.pt.x)*(checkPoint.x - keyP1.pt.x) + (checkPoint.y - keyP1.pt.y) *(checkPoint.y - keyP1.pt.y)) - keyP1.size / 2;
-			dist2 = sqrt((checkPoint.x - keyP2.pt.x)*(checkPoint.x - keyP2.pt.x) + (checkPoint.y - keyP2.pt.y)*(checkPoint.y - keyP2.pt.y)) - keyP2.size / 2;
-			checkPoint.z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
-										   //get the color at that point- if white then weight = zero. don't want it
-										   // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
-										   //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
-										   // looking at the verticality of the path of the robot- the more vertical the slope is, the better the robot's path of travel.
-	/*}
-	else
-		return false;*/
+	//assigning weight based on distance from that point to the two it is in between. Helping to pick the best points
+	float dist1, dist2;
+	dist1 = sqrt((checkPoint.x - keyP1.pt.x)*(checkPoint.x - keyP1.pt.x) + (checkPoint.y - keyP1.pt.y) *(checkPoint.y - keyP1.pt.y)) - keyP1.size / 2;
+	dist2 = sqrt((checkPoint.x - keyP2.pt.x)*(checkPoint.x - keyP2.pt.x) + (checkPoint.y - keyP2.pt.y)*(checkPoint.y - keyP2.pt.y)) - keyP2.size / 2;
+	checkPoint.z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
+								   //get the color at that point- if white then weight = zero. don't want it
+								   // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
+								   //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
+								   // looking at the verticality of the path of the robot- the more vertical the slope is, the better the robot's path of travel.
+/*}
+else
+	return false;*/
 	return true;
 
 }
-void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints, vector<float> slope)
+void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vector<Point3f> &midpoints)//, vector<float> slope)
 {
 	int k = 0;
 	bool keep = true;
 	//sorts Keypoints left to right by furthest left reach of the keyPoint -MAt (0,0) is at top left corner-Probably sorts...? 
-	for (int i = keypoints.size()-1; i > 0; i--)
+	for (int i = keypoints.size() - 1; i > 0; i--)
 	{
 		for (int j = 0; j <i; j++)
 		{
-			if ((keypoints[j].pt.x- keypoints[j].size/2) > (keypoints[j + 1].pt.x - keypoints[j+1].size / 2))
+			if ((keypoints[j].pt.x - keypoints[j].size / 2) >(keypoints[j + 1].pt.x - keypoints[j + 1].size / 2))
 			{
 				KeyPoint temp;
 				temp = keypoints[j];
@@ -177,6 +176,7 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	}
 	// draws circles on maskedI for each of the features (keypoints)aka craters and rocks based on their size- the larger they are, the larger the size (keyfeatures)
 	// used later to determine if the midpoints fall within the keyfeatures
+	// DEBUG now
 	for (int i = 0; i < keypoints.size()-1; i++)
 	{	
 		circle(maskedI, keypoints[i].pt, (keypoints[i].size / 2), (255, 255, 255), -1);
@@ -187,30 +187,30 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	midpoints[k].y = keypoints[0].pt.y;
 	if (GoodKeypoint(maskedI, picture, keypoints[0], KeyPoint(Point2f(0, midpoints[k].y), picture.rows / 10), midpoints[k]))//is it good?
 	{
-		slope[k] = 100;
+		//slope[k] = 100;
 		k++;
 	}
 	// picking out the midpoints between each of the keypoints- these will be potential places for the robot to drive through
 	// only look between adjacent keyfeatures
-	for (int i = 0; i < keypoints.size()-1; i++)
+	for (int i = 0; i < keypoints.size() - 1; i++)
 	{
 		//calc midpoints
-		midpoints[k].x = (keypoints[i].pt.x + keypoints[i+1].pt.x) / 2;
-		midpoints[k].y = (keypoints[i].pt.y + keypoints[i+1].pt.y) / 2;
-		if (GoodKeypoint(maskedI, picture, keypoints[i], keypoints[i+1], midpoints[k]))
+		midpoints[k].x = (keypoints[i].pt.x + keypoints[i + 1].pt.x) / 2;
+		midpoints[k].y = (keypoints[i].pt.y + keypoints[i + 1].pt.y) / 2;
+		if (GoodKeypoint(maskedI, picture, keypoints[i], keypoints[i + 1], midpoints[k]))
 		{
-			
-			slope[k] = 100;//(keypoints[i].pt.x - keypoints[i+1].pt.x) / (keypoints[i+1].pt.y - keypoints[i].pt.y);
-		k++;
+
+			//slope[k] = 100;//(keypoints[i].pt.x - keypoints[i+1].pt.x) / (keypoints[i+1].pt.y - keypoints[i].pt.y);
+			k++;
 		}
-				
+
 	}
 	//from the keypoint adjacent to right wall
-	midpoints[k].y = keypoints[keypoints.size()-1].pt.y;
+	midpoints[k].y = keypoints[keypoints.size() - 1].pt.y;
 	midpoints[k].x = (maskedI.cols - keypoints[keypoints.size() - 1].pt.x) / 2;
 	if (GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), picture.rows / 10), keypoints[keypoints.size() - 1], midpoints[k]))
 	{
-		slope[k] = 100;
+		//slope[k] = 100;
 	}
 	//DEBUG
 	imshow("limited", maskedI);
@@ -218,24 +218,28 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 
 }
 //called after the sortingKeypoints to pick the best path
-void preferredOrdering(vector<Point3f> &midpoints, vector<float> &slope, Mat &Again)
+void preferredOrdering(vector<Point3f> &midpoints, Mat &Again) //vector<float> &slope, Mat &Again)
 {
 	int best = 0;
 	// need to weight the slope and the distance
-	for (int k = 0; k < midpoints.size()-2; k++)
+	for (int k = 0; k < midpoints.size() - 2; k++)
 	{
 		// basic sort, maybe wants to be fancier, but speed is less of an issue than storage is
-		if (slope[k] < slope[best])
+		/*if (slope[k] < slope[best])
 		{
 			best = k;
 		}
 		else if (slope[k] == slope[best] && midpoints[k].z>midpoints[best].z)
 		{
 			best = k;
+		}*/
+		if (midpoints[k].z > midpoints[best].z)
+		{
+			best = k;
 		}
 
 	}
-	// plot the circle at which your main midpoint is
+	// plot the circle at which your main midpoint is DEBUG
 	circle(Again, Point2f(midpoints[best].x, midpoints[best].y), 2, (0, 0, 255), 3);
 	imshow("Preferred Spot", Again);
 	//need to take the slopes and compare to find the biggest slope and then put that point as the preferred point. maybe incorporate
@@ -258,12 +262,12 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	//params.minThreshold = 10;
 	//params.maxThreshold = 200;
 	params.filterByArea = true;
-	params.minArea = (bwdifferential.rows/1.1);
+	params.minArea = (bwdifferential.rows / 1.1);
 	//params.maxArea = (bwdifferential.cols*bwdifferential.rows);
 	params.minDistBetweenBlobs = bwdifferential.rows*0.3;//minDistance;
 	params.filterByCircularity = false;
 	params.filterByColor = true;
-	params.blobColor=255;
+	params.blobColor = 255;
 	params.filterByConvexity = false;
 	//params.minConvexity = 0.8;
 	params.filterByInertia = false;
@@ -272,18 +276,18 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
 	vector<KeyPoint> keypoints;
 	detector->detect(bwdifferential, keypoints);
-	Mat maskedI,Again;
+	Mat maskedI, Again;
 	//create a black image for just the keypoints
 	bwdifferential.copyTo(maskedI);
 	picture.copyTo(Again);
 	threshold(maskedI, maskedI, 0, 0, THRESH_BINARY);//black image
 	cvtColor(maskedI, maskedI, CV_GRAY2BGR);//lets colors be put onto it, will be able to cut out eventually, DEBUG
-	drawKeypoints(bwdifferential, keypoints, bwdifferential, (255, 255, 0));
-	midpoints.resize(keypoints.size()*keypoints.size()+2* keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two plus one from the point to each wall
-	slope.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // same as midpoints
-	SortKeypoints(keypoints, maskedI, picture, midpoints, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
-	preferredOrdering(midpoints,slope,Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible
-	
+	drawKeypoints(bwdifferential, keypoints, bwdifferential, (255, 255, 0)); //DEBUG?
+	midpoints.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two plus one from the point to each wall
+	//slope.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // same as midpoints
+	SortKeypoints(keypoints, maskedI, picture, midpoints);//, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
+	preferredOrdering(midpoints, Again);//slope, Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible
+
 	imshow("kp", bwdifferential); // DEBUG
 	imshow("blacky2", picture);//DEBUG?
 }
@@ -291,7 +295,7 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 void motionSearch(Mat bwdifferential, Mat &frame1)
 {
 
-	
+
 	Mat temp;
 	bool objectExists = false;
 	// required for finding the contours which is doen by findContours
@@ -450,43 +454,43 @@ int main()
 		if (video.read(frame1))*/
 
 		frame1 = imread("46.jpg");
-			// height =240
-			// width = 320
+		// height =240
+		// width = 320
 
-			Mat hsv1,gray3, croppingObst, grayHold;
-			int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
-			
-			cvtColor(frame1, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
-			cvtColor(frame1, hsv1, CV_BGR2HSV);
+		Mat hsv1, gray3, croppingObst, grayHold;
+		int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
 
-			//adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
-			adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
-			//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
+		cvtColor(frame1, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
+		cvtColor(frame1, hsv1, CV_BGR2HSV);
 
-			//cvtColor(gray2, gray2, CV_GRAY2BGR);
-			//cvtColor(gray2, gray2, CV_BGR2GRAY);
+		//adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
+		adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
+		//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
 
-			//pickFeatures(medianBlurred, gray3);
-			//imshow("Frame1", frame1);
-			//imshow("Gray", gray1);
-			//motionSearch(gray2, gray1);
-			//imshow("BW", gray2);
-			//imshow("AdaptiveThreshold", medianBlurred);
-			//pickFeatures(medianBlurred, gray3);
-			
-			//CROPPING OUT NON_ARENA
-			CropNonArena(hsv1, gray2, gray3,cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
-			cvtColor(hsv1, croppingObst, CV_HSV2BGR);
-			cvtColor(croppingObst, croppingObst,CV_BGR2GRAY);
-			croppingObst.copyTo(grayHold);
-			
-			//HSV THRESHOLDING FOR OBSTACLE AREA
-			ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
-			grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
-			
-			//FEATURE SELECTION
-			pickFeatures(croppingObst, grayHold);
-		
+		//cvtColor(gray2, gray2, CV_GRAY2BGR);
+		//cvtColor(gray2, gray2, CV_BGR2GRAY);
+
+		//pickFeatures(medianBlurred, gray3);
+		//imshow("Frame1", frame1);
+		//imshow("Gray", gray1);
+		//motionSearch(gray2, gray1);
+		//imshow("BW", gray2);
+		//imshow("AdaptiveThreshold", medianBlurred);
+		//pickFeatures(medianBlurred, gray3);
+
+		//CROPPING OUT NON_ARENA
+		CropNonArena(hsv1, gray2, gray3, cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
+		cvtColor(hsv1, croppingObst, CV_HSV2BGR);
+		cvtColor(croppingObst, croppingObst, CV_BGR2GRAY);
+		croppingObst.copyTo(grayHold);
+
+		//HSV THRESHOLDING FOR OBSTACLE AREA
+		ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
+		grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
+
+		//FEATURE SELECTION
+		pickFeatures(croppingObst, grayHold);
+
 
 		switch (waitKey(10)) {
 		case 27: //'esc' key has been pressed, exit program.
