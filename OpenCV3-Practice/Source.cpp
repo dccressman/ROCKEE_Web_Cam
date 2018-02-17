@@ -68,14 +68,14 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3, int &topCrop)
 	}
 	arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);//DEBUG
 	arrowedLine(gray3, polygon[longest], polygon[longest + 1], Scalar(255, 255, 255), 4);//DEBUG
-	topCrop = gray3.rows - polygon[longest].y;
-	Rect cropping = Rect(0, polygon[longest].y, gray3.cols, topCrop);// cropping rectangle- based on the location of the longest polygon length. 
-																							   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
+	topCrop = gray3.rows - int((polygon[longest].y*0.95));
+	Rect cropping = Rect(0, int((polygon[longest].y*0.95)), gray3.cols, topCrop);// cropping rectangle- based on the location of the longest polygon length. 
+														   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
 	cutImage = cutImage(cropping);// crops the image to be within the cropping rectangle
 
 
 	//DEBUG
-	//imshow("imshowing", gray3);//DEBUG
+	imshow("imshowing", gray3);//DEBUG
 	//imshow("blockedOut", gray2);//DEBUG
 	//imshow("cropped", cutImage);//DEBUG
 
@@ -90,20 +90,13 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	int maxContour = 0;
 	int area = 0;
 	bool detected = false;
-	int erosion = 1;
+	int iterations = 3;
 	int dilation = 100;
 	Rect obstacleArea;
 	inRange(hsv1, Scalar(0, 10, 10), Scalar(40, 255, 255), hsv1Thresh);// hardcoded values- will be doing some soft coded values in actuality if this works Orange HSV estimated are (30, 100%, 100%)
 	hsv1Thresh.copyTo(test);
-	
-		//if (erosion > 6) {
-			//erosion -= 5;
-		//}
-		//dilation += 2;
-		//morphologyEx(hsv1Thresh, hsv1Thresh, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows/200, hsv1Thresh.rows/200)));//Test and make sure that this works the best it can across multiple views and set ups																   
-		//erode(hsv1Thresh, test, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / erosion, hsv1Thresh.rows / erosion)));
-		dilate(test, test, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / dilation, hsv1Thresh.rows /dilation)),Point(-1,-1),3);
-		//dilate(hsv1Thresh, hsv1Thresh, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / 50, hsv1Thresh.rows / 50)));
+	while (!detected) {
+		dilate(test, test, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / dilation, hsv1Thresh.rows / dilation)), Point(-1, -1), iterations);// makes the white a little bit larger so they can be detected.
 		findContours(test, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));//looks for contours within the thresholded hsv image
 		imshow("hsv", test);//DEBUG
 		for (int i = 0; i < contours.size(); i++)
@@ -118,8 +111,13 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 			}
 		}
 		obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
-		cout << obstacleArea.height<<endl; //DEBUG
 
+		if (obstacleArea.height > 30)//Note: most that we have been seeing, based on the image size are 65-69
+		{
+			detected = true;
+		}
+		iterations++;
+	}
 	obstacleArea.x = 0;// extending the bounding rectangle to fit the width of the image
 	obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
 	topCrop = obstacleArea.y + obstacleArea.height;
@@ -485,7 +483,7 @@ int main()
 		frame1 = imread("50.jpg");
 		// height =240
 		// width = 320
-
+		imshow("Raw", frame1);
 		Mat hsv1, gray3, croppingObst, grayHold;
 		int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
 
@@ -509,16 +507,17 @@ int main()
 
 		//CROPPING OUT NON_ARENA
 		CropNonArena(hsv1, gray2, gray3, cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
+		
 		cvtColor(hsv1, croppingObst, CV_HSV2BGR);
 		cvtColor(croppingObst, croppingObst, CV_BGR2GRAY);
 		croppingObst.copyTo(grayHold);
 
 		//HSV THRESHOLDING FOR OBSTACLE AREA
 		ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
-		//grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
+		grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
 
 		//FEATURE SELECTION
-	//	pickFeatures(croppingObst, grayHold);
+	pickFeatures(croppingObst, grayHold);
 
 
 		switch (waitKey(10)) {
