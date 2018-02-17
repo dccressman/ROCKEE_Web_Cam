@@ -83,36 +83,65 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3, int &topCrop)
 //crops out the obstacleArea to make robot path determination better
 void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 {
-	Mat hsv1Thresh;
+	Mat hsv1Thresh, test;
 	vector< vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 	vector<Point>goodPoints;
-
+	int maxContour = 0;
+	int area = 0;
+	bool detected = false;
+	int erosion = 1;
+	int dilation = 100;
+	Rect obstacleArea;
 	inRange(hsv1, Scalar(0, 10, 10), Scalar(40, 255, 255), hsv1Thresh);// hardcoded values- will be doing some soft coded values in actuality if this works Orange HSV estimated are (30, 100%, 100%)
-
-																	   //looks for contours within the thresholded hsv image
-	findContours(hsv1Thresh, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));
-	for (int i = 1; i < contours.size(); i++)
-	{
-		if (contourArea(contours.at(i)) > 20)// takes thes contours and turns them into a vector of points with area limit to disregard the throwaways
+	hsv1Thresh.copyTo(test);
+	
+		//if (erosion > 6) {
+			//erosion -= 5;
+		//}
+		//dilation += 2;
+		//morphologyEx(hsv1Thresh, hsv1Thresh, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows/200, hsv1Thresh.rows/200)));//Test and make sure that this works the best it can across multiple views and set ups																   
+		//erode(hsv1Thresh, test, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / erosion, hsv1Thresh.rows / erosion)));
+		dilate(test, test, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / dilation, hsv1Thresh.rows /dilation)),Point(-1,-1),3);
+		//dilate(hsv1Thresh, hsv1Thresh, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / 50, hsv1Thresh.rows / 50)));
+		findContours(test, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));//looks for contours within the thresholded hsv image
+		imshow("hsv", test);//DEBUG
+		for (int i = 0; i < contours.size(); i++)
 		{
-			goodPoints.push_back(contours.at(i).at(1)); // takes only the first point of thecontour
+			area = contourArea(contours.at(i));
+			if (area > 40)// takes thes contours and turns them into a vector of points with area limit to disregard the throwaways
+			{
+				goodPoints.push_back(contours.at(i).at(1)); // takes only the first point of thecontour
+				goodPoints.push_back(contours.at(i).back());
+				if (area > maxContour)
+					maxContour = area;
+			}
 		}
-	}
-	Rect obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
+		obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
+		cout << obstacleArea.height<<endl; //DEBUG
+
 	obstacleArea.x = 0;// extending the bounding rectangle to fit the width of the image
-	obstacleArea.height -= 9;//offsets for limits within the code
 	obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
 	topCrop = obstacleArea.y + obstacleArea.height;
 	bottomCrop = obstacleArea.y;
 	rectangle(hsv1, obstacleArea, Scalar(0, 0, 0), 2);// DEBUG
 
 	croppingObst = croppingObst(obstacleArea);
+	inRange(croppingObst, Scalar(0, 10, 10), Scalar(40, 255, 255), hsv1Thresh);
+	//cout << countNonZero(hsv1Thresh)<< "      "<< obstacleArea.height*obstacleArea.width*0.1 << endl; DEBUG
+	if (countNonZero(hsv1Thresh) > (obstacleArea.height*obstacleArea.width*0.1))
+	{
+		obstacleArea.height -= (*(hsv1.size.p) * 30 / maxContour);
+	}
+	else
+	{
+		obstacleArea.height += (*(hsv1.size.p) * 30 / maxContour);
+	}
 	adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
 	//adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
 
 	imshow("thresholded", croppingObst);//DEBUG
-	imshow("hsv", hsv1);//DEBUG
+	imshow("hsv2", hsv1);//DEBUG
 }
 //sorts the input of keypoints to pick out the robot path
 //may need updated to simplify since the keypoints are going to be sorted, may be able to ignore completely
@@ -145,6 +174,7 @@ bool GoodKeypoint(Mat &maskedI, Mat &picture, KeyPoint &keyP1, KeyPoint &keyP2, 
 	float dist1, dist2;
 	dist1 = sqrt((checkPoint.x - keyP1.pt.x)*(checkPoint.x - keyP1.pt.x) + (checkPoint.y - keyP1.pt.y) *(checkPoint.y - keyP1.pt.y)) - keyP1.size / 2;
 	dist2 = sqrt((checkPoint.x - keyP2.pt.x)*(checkPoint.x - keyP2.pt.x) + (checkPoint.y - keyP2.pt.y)*(checkPoint.y - keyP2.pt.y)) - keyP2.size / 2;
+
 	checkPoint.z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
 								   //get the color at that point- if white then weight = zero. don't want it
 								   // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
@@ -187,7 +217,7 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	midpoints[k].y = keypoints[0].pt.y;
 	if (GoodKeypoint(maskedI, picture, keypoints[0], KeyPoint(Point2f(0, midpoints[k].y), picture.rows / 10), midpoints[k]))//is it good?
 	{
-		//slope[k] = 100;
+		//midpoints[k].z *= 10;
 		k++;
 	}
 	// picking out the midpoints between each of the keypoints- these will be potential places for the robot to drive through
@@ -200,7 +230,8 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 		if (GoodKeypoint(maskedI, picture, keypoints[i], keypoints[i + 1], midpoints[k]))
 		{
 
-			//slope[k] = 100;//(keypoints[i].pt.x - keypoints[i+1].pt.x) / (keypoints[i+1].pt.y - keypoints[i].pt.y);
+			//midpoints[k].z *= (keypoints[i].pt.x - keypoints[i+1].pt.x) / (keypoints[i+1].pt.y - keypoints[i].pt.y);
+			//cout<< (keypoints[i].pt.x - keypoints[i + 1].pt.x) / (keypoints[i + 1].pt.y - keypoints[i].pt.y)<<endl;
 			k++;
 		}
 
@@ -208,10 +239,8 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	//from the keypoint adjacent to right wall
 	midpoints[k].y = keypoints[keypoints.size() - 1].pt.y;
 	midpoints[k].x = (maskedI.cols - keypoints[keypoints.size() - 1].pt.x) / 2;
-	if (GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), picture.rows / 10), keypoints[keypoints.size() - 1], midpoints[k]))
-	{
-		//slope[k] = 100;
-	}
+	GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), picture.rows / 10), keypoints[keypoints.size() - 1], midpoints[k]);
+	
 	//DEBUG
 	imshow("limited", maskedI);
 	imshow("blacky", picture);
@@ -453,7 +482,7 @@ int main()
 		}
 		if (video.read(frame1))*/
 
-		frame1 = imread("46.jpg");
+		frame1 = imread("50.jpg");
 		// height =240
 		// width = 320
 
@@ -486,10 +515,10 @@ int main()
 
 		//HSV THRESHOLDING FOR OBSTACLE AREA
 		ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
-		grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
+		//grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
 
 		//FEATURE SELECTION
-		pickFeatures(croppingObst, grayHold);
+	//	pickFeatures(croppingObst, grayHold);
 
 
 		switch (waitKey(10)) {
