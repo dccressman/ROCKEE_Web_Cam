@@ -75,7 +75,7 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3, int &topCrop)
 
 
 	//DEBUG
-	imshow("imshowing", gray3);//DEBUG
+	//imshow("imshowing", gray3);//DEBUG
 	//imshow("blockedOut", gray2);//DEBUG
 	//imshow("cropped", cutImage);//DEBUG
 
@@ -112,7 +112,7 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 		}
 		obstacleArea = boundingRect(goodPoints);// bounds the points in the obstacle area
 
-		if (obstacleArea.height > 30)//Note: most that we have been seeing, based on the image size are 65-69
+		if (obstacleArea.height > 30)//Note: most that we have been seeing, based on the image size are 65-69 for cols of 480 by some normal value
 		{
 			detected = true;
 		}
@@ -143,7 +143,7 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 }
 //sorts the input of keypoints to pick out the robot path
 //may need updated to simplify since the keypoints are going to be sorted, may be able to ignore completely
-bool GoodKeypoint(Mat &maskedI, Mat &picture, KeyPoint &keyP1, KeyPoint &keyP2, Point3f &checkPoint)
+bool GoodKeypoint(Mat &maskedI, Mat &picture, KeyPoint &keyP1, KeyPoint &keyP2, Point3f &checkPoint)//keyP1 is to the left, keyP2 is to the right
 {
 	bool keep = true;
 	//Vec3b color = maskedI.at<Vec3b>(Point(checkPoint.x, checkPoint.y));
@@ -169,18 +169,18 @@ bool GoodKeypoint(Mat &maskedI, Mat &picture, KeyPoint &keyP1, KeyPoint &keyP2, 
 	circle(picture, Point2f(checkPoint.x, checkPoint.y), 2, (0, 0, 255), 3); //DEBUG- visualizing the driveable points
 
 	//assigning weight based on distance from that point to the two it is in between. Helping to pick the best points
-	float dist1, dist2;
-	dist1 = sqrt((checkPoint.x - keyP1.pt.x)*(checkPoint.x - keyP1.pt.x) + (checkPoint.y - keyP1.pt.y) *(checkPoint.y - keyP1.pt.y)) - keyP1.size / 2;
-	dist2 = sqrt((checkPoint.x - keyP2.pt.x)*(checkPoint.x - keyP2.pt.x) + (checkPoint.y - keyP2.pt.y)*(checkPoint.y - keyP2.pt.y)) - keyP2.size / 2;
-
-	checkPoint.z = dist1 + dist2;// can add a distance 3 for the distance from the robot.
+	float dist1;//, dist2;
+	//dist1 = sqrt((checkPoint.x - keyP1.pt.x)*(checkPoint.x - keyP1.pt.x) + (checkPoint.y - keyP1.pt.y) *(checkPoint.y - keyP1.pt.y)) - keyP1.size / 2;
+	//dist2 = sqrt((checkPoint.x - keyP2.pt.x)*(checkPoint.x - keyP2.pt.x) + (checkPoint.y - keyP2.pt.y)*(checkPoint.y - keyP2.pt.y)) - keyP2.size / 2;
+	dist1 = (keyP2.pt.x - keyP2.size / 2)-(keyP1.pt.x + keyP1.size / 2);// width of pass for the robot;
+	checkPoint.z = dist1;// +dist2;// can add a distance 3 for the distance from the robot.
 								   //get the color at that point- if white then weight = zero. don't want it
 								   // if the line from the point to the robot passses through white, then weight =0. no want, got rid of
 								   //alternatively we could sort the keypoints. organize them from one direction to another via x values- then would have to do less sorting
 								   // looking at the verticality of the path of the robot- the more vertical the slope is, the better the robot's path of travel.
-/*}
-else
-	return false;*/
+//}
+//else
+	//return false;
 	return true;
 
 }
@@ -205,13 +205,14 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	// draws circles on maskedI for each of the features (keypoints)aka craters and rocks based on their size- the larger they are, the larger the size (keyfeatures)
 	// used later to determine if the midpoints fall within the keyfeatures
 	// DEBUG now
-	for (int i = 0; i < keypoints.size()-1; i++)
+	for (int i = 0; i < keypoints.size(); i++)
 	{	
+		
 		circle(maskedI, keypoints[i].pt, (keypoints[i].size / 2), (255, 255, 255), -1);
 	}
 
 	// from the keypoints adjacent to left wall
-	midpoints[k].x = keypoints[0].pt.x / 2;
+	midpoints[k].x = (keypoints[0].pt.x-keypoints[0].size)/ 2;
 	midpoints[k].y = keypoints[0].pt.y;
 	if (GoodKeypoint(maskedI, picture, keypoints[0], KeyPoint(Point2f(0, midpoints[k].y), picture.rows / 10), midpoints[k]))//is it good?
 	{
@@ -222,9 +223,11 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	// only look between adjacent keyfeatures
 	for (int i = 0; i < keypoints.size() - 1; i++)
 	{
+		
 		//calc midpoints
-		midpoints[k].x = (keypoints[i].pt.x + keypoints[i + 1].pt.x) / 2;
+		midpoints[k].x = (keypoints[i].pt.x + keypoints[i].size/2+ keypoints[i + 1].pt.x - keypoints[i + 1].size / 2) / 2;
 		midpoints[k].y = (keypoints[i].pt.y + keypoints[i + 1].pt.y) / 2;
+		cout << keypoints[i].pt.x << "     " << keypoints[i].pt.y << "   " << keypoints[i].size / 2 << " M " << midpoints[k].x << "   " << midpoints[k].y << " M " << keypoints[i + 1].pt.x <<"   "<< keypoints[i + 1].pt.y << "   " << keypoints[i + 1].size << endl;
 		if (GoodKeypoint(maskedI, picture, keypoints[i], keypoints[i + 1], midpoints[k]))
 		{
 
@@ -235,13 +238,13 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 
 	}
 	//from the keypoint adjacent to right wall
-	midpoints[k].y = keypoints[keypoints.size() - 1].pt.y;
-	midpoints[k].x = (maskedI.cols - keypoints[keypoints.size() - 1].pt.x) / 2;
-	GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), picture.rows / 10), keypoints[keypoints.size() - 1], midpoints[k]);
+	midpoints[k].y = keypoints[keypoints.size()-1].pt.y;
+	midpoints[k].x = (maskedI.cols + keypoints[keypoints.size()-1].pt.x+ keypoints[keypoints.size()-1].size/2) / 2;
+	GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), 0.2), keypoints[keypoints.size() - 1], midpoints[k]);
 	
 	//DEBUG
 	imshow("limited", maskedI);
-	imshow("blacky", picture);
+	imshow("midpoints", picture);
 
 }
 //called after the sortingKeypoints to pick the best path
@@ -278,7 +281,8 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 {
 	// opening the image (erosion then dilation to reduce noise)
 	//Kernel size is the square of pixels that you are comparing to see if should be white or not... see http://aishack.in/tutorials/mathematical-morphology/
-	morphologyEx(bwdifferential, bwdifferential, MORPH_OPEN, getStructuringElement(MORPH_ELLIPSE, Size(bwdifferential.rows / 15, bwdifferential.rows / 15)));//Test and make sure that this works the best it can across multiple views and set ups
+	morphologyEx(bwdifferential, bwdifferential, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 31, bwdifferential.rows / 31)),Point(-1,-1),3);//Test and make sure that this works the best it can across multiple views and set ups
+	dilate(bwdifferential, bwdifferential, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 31, bwdifferential.rows / 31)));
 	imshow("bw2", bwdifferential);//DEBUG?
 	vector< vector<Point> > contours;//Do I need?
 	vector<Vec4i> hierarchy; // Do I need?
