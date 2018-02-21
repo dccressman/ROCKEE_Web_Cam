@@ -227,7 +227,7 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 		//calc midpoints
 		midpoints[k].x = (keypoints[i].pt.x + keypoints[i].size/2+ keypoints[i + 1].pt.x - keypoints[i + 1].size / 2) / 2;
 		midpoints[k].y = (keypoints[i].pt.y + keypoints[i + 1].pt.y) / 2;
-		cout << keypoints[i].pt.x << "     " << keypoints[i].pt.y << "   " << keypoints[i].size / 2 << " M " << midpoints[k].x << "   " << midpoints[k].y << " M " << keypoints[i + 1].pt.x <<"   "<< keypoints[i + 1].pt.y << "   " << keypoints[i + 1].size << endl;
+		//cout << keypoints[i].pt.x << "     " << keypoints[i].pt.y << "   " << keypoints[i].size / 2 << " M " << midpoints[k].x << "   " << midpoints[k].y << " M " << keypoints[i + 1].pt.x <<"   "<< keypoints[i + 1].pt.y << "   " << keypoints[i + 1].size << endl;
 		if (GoodKeypoint(maskedI, picture, keypoints[i], keypoints[i + 1], midpoints[k]))
 		{
 
@@ -252,7 +252,7 @@ void preferredOrdering(vector<Point3f> &midpoints, Mat &Again) //vector<float> &
 {
 	int best = 0;
 	// need to weight the slope and the distance
-	for (int k = 0; k < midpoints.size() - 2; k++)
+	for (int k = 0; k < midpoints.size(); k++)
 	{
 		// basic sort, maybe wants to be fancier, but speed is less of an issue than storage is
 		/*if (slope[k] < slope[best])
@@ -263,6 +263,7 @@ void preferredOrdering(vector<Point3f> &midpoints, Mat &Again) //vector<float> &
 		{
 			best = k;
 		}*/
+		cout << midpoints[k].z << endl;
 		if (midpoints[k].z > midpoints[best].z)
 		{
 			best = k;
@@ -281,11 +282,39 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 {
 	// opening the image (erosion then dilation to reduce noise)
 	//Kernel size is the square of pixels that you are comparing to see if should be white or not... see http://aishack.in/tutorials/mathematical-morphology/
-	morphologyEx(bwdifferential, bwdifferential, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 31, bwdifferential.rows / 31)),Point(-1,-1),3);//Test and make sure that this works the best it can across multiple views and set ups
-	dilate(bwdifferential, bwdifferential, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 31, bwdifferential.rows / 31)));
+	Mat temp2;
+	bwdifferential.copyTo(temp2);
+	int totalArea = bwdifferential.rows*bwdifferential.cols;
+	int whiteArea = countNonZero(bwdifferential);
+	int iterations = 1;
+	while (whiteArea > totalArea*0.2) {
+
+		if (iterations < 4) {
+			morphologyEx(bwdifferential, bwdifferential, MORPH_OPEN, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 31, bwdifferential.rows / 31)), Point(-1, -1), iterations);//Test and make sure that this works the best it can across multiple views and set ups
+			iterations++;
+		}
+		else
+		{
+			erode(bwdifferential, bwdifferential, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 27, bwdifferential.rows / 27)));
+		}
+		
+		//cout << "iterations " << iterations << endl; //DEBUG
+		whiteArea = countNonZero(bwdifferential);
+		//cout << whiteArea << endl; //debug
+	}
+
+		dilate(bwdifferential, bwdifferential, getStructuringElement(MORPH_RECT, Size(bwdifferential.rows / 31, bwdifferential.rows / 31)));
+	//cout << "            "<<countNonZero(bwdifferential) << endl;//DEBUG
+
+	
+
+	//find contours then contours above a set area... fill them in and draw them on the image. This will make it so that the blob detector has an easier time finding them.  Could do a little further erosion depending... also may not work
+
 	imshow("bw2", bwdifferential);//DEBUG?
+
 	vector< vector<Point> > contours;//Do I need?
 	vector<Vec4i> hierarchy; // Do I need?
+	
 	vector<Point3f> midpoints;// change to point3f and get rid of the weight vector
 	vector<float> slope;
 	//parameters for the detectro to detect keypoints within the bwdifferential
@@ -294,15 +323,15 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	//params.maxThreshold = 200;
 	params.filterByArea = true;
 	params.minArea = (bwdifferential.rows / 1.1);
-	//params.maxArea = (bwdifferential.cols*bwdifferential.rows);
+	params.maxArea = 10000000;
 	params.minDistBetweenBlobs = bwdifferential.rows*0.3;//minDistance;
 	params.filterByCircularity = false;
 	params.filterByColor = true;
 	params.blobColor = 255;
 	params.filterByConvexity = false;
-	//params.minConvexity = 0.8;
+	params.minConvexity = 0.1;
 	params.filterByInertia = false;
-	//params.minInertiaRatio = float(0.05);
+	params.minInertiaRatio = float(0.01);
 	//detect the keypoints within bwdifferential
 	Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
 	vector<KeyPoint> keypoints;
@@ -310,9 +339,15 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	Mat maskedI, Again;
 	//create a black image for just the keypoints
 	bwdifferential.copyTo(maskedI);
+	Mat temp; //DEBUG
 	picture.copyTo(Again);
 	threshold(maskedI, maskedI, 0, 0, THRESH_BINARY);//black image
 	cvtColor(maskedI, maskedI, CV_GRAY2BGR);//lets colors be put onto it, will be able to cut out eventually, DEBUG
+	maskedI.copyTo(temp);// DEBUG
+	findContours(bwdifferential, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));// DEBUG
+	drawContours(temp, contours, -2, Scalar(255, 0, 255), 1); //DEBUG
+	imshow("bw3", temp);//DEBUG
+
 	drawKeypoints(bwdifferential, keypoints, bwdifferential, (255, 255, 0)); //DEBUG?
 	midpoints.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two plus one from the point to each wall
 	//slope.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // same as midpoints
@@ -484,7 +519,7 @@ int main()
 		}
 		if (video.read(frame1))*/
 
-		frame1 = imread("50.jpg");
+		frame1 = imread("51.jpg"); // work on the edges as far as their cutoffs.... why it does not select the keypoint with the largest z
 		// height =240
 		// width = 320
 		imshow("Raw", frame1);
@@ -511,7 +546,7 @@ int main()
 
 		//CROPPING OUT NON_ARENA
 		CropNonArena(hsv1, gray2, gray3, cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
-		
+		imshow("first crop", hsv1);// DEBUG
 		cvtColor(hsv1, croppingObst, CV_HSV2BGR);
 		cvtColor(croppingObst, croppingObst, CV_BGR2GRAY);
 		croppingObst.copyTo(grayHold);
