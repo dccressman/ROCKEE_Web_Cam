@@ -68,7 +68,8 @@ void CropNonArena(Mat &cutImage, Mat &gray2, Mat &gray3, int &topCrop)
 	}
 	arrowedLine(gray3, polygon[1], polygon[2], Scalar(255, 255, 255), 4);//DEBUG
 	arrowedLine(gray3, polygon[longest], polygon[longest + 1], Scalar(255, 255, 255), 4);//DEBUG
-	topCrop = gray3.rows - int((polygon[longest].y*0.95));
+	topCrop = int(gray3.rows-polygon[longest].y*0.95);
+	
 	Rect cropping = Rect(0, int((polygon[longest].y*0.95)), gray3.cols, topCrop);// cropping rectangle- based on the location of the longest polygon length. 
 														   //May have to look at since the polygon goes around in a counterclockwise, the highest y to go with the first half of x values- if the longest polygon length of the largest contour area doesn't hold as a good place
 	cutImage = cutImage(cropping);// crops the image to be within the cropping rectangle
@@ -98,7 +99,7 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	while (!detected) {
 		dilate(test, test, getStructuringElement(MORPH_RECT, Size(hsv1Thresh.rows / dilation, hsv1Thresh.rows / dilation)), Point(-1, -1), iterations);// makes the white a little bit larger so they can be detected.
 		findContours(test, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));//looks for contours within the thresholded hsv image
-		imshow("hsv", test);//DEBUG
+		//imshow("hsv", test);//DEBUG
 		for (int i = 0; i < contours.size(); i++)
 		{
 			area = contourArea(contours.at(i));
@@ -120,8 +121,8 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	}
 	obstacleArea.x = 0;// extending the bounding rectangle to fit the width of the image
 	obstacleArea.width = hsv1.cols;// extending the bounding rectangle to fit the width of the image
-	topCrop = obstacleArea.y + obstacleArea.height;
-	bottomCrop = obstacleArea.y;
+	topCrop = obstacleArea.y+ obstacleArea.height;
+	bottomCrop = obstacleArea.y;//-obstacleArea.height;
 	rectangle(hsv1, obstacleArea, Scalar(0, 0, 0), 2);// DEBUG
 
 	croppingObst = croppingObst(obstacleArea);
@@ -240,15 +241,15 @@ void SortKeypoints(vector<KeyPoint> &keypoints, Mat &maskedI, Mat &picture, vect
 	//from the keypoint adjacent to right wall
 	midpoints[k].y = keypoints[keypoints.size()-1].pt.y;
 	midpoints[k].x = (maskedI.cols + keypoints[keypoints.size()-1].pt.x+ keypoints[keypoints.size()-1].size/2) / 2;
-	GoodKeypoint(maskedI, picture, KeyPoint(Point2f(maskedI.cols, midpoints[k].y), 0.2), keypoints[keypoints.size() - 1], midpoints[k]);
+	GoodKeypoint(maskedI, picture,  keypoints[keypoints.size() - 1], KeyPoint(Point2f(maskedI.cols, midpoints[k].y), 0.2), midpoints[k]);
 	
 	//DEBUG
-	imshow("limited", maskedI);
-	imshow("midpoints", picture);
+	//imshow("limited", maskedI);
+	//imshow("midpoints", picture);
 
 }
 //called after the sortingKeypoints to pick the best path
-void preferredOrdering(vector<Point3f> &midpoints, Mat &Again) //vector<float> &slope, Mat &Again)
+int preferredOrdering(vector<Point3f> &midpoints,vector<float> &slope, Mat &Again)
 {
 	int best = 0;
 	// need to weight the slope and the distance
@@ -263,22 +264,25 @@ void preferredOrdering(vector<Point3f> &midpoints, Mat &Again) //vector<float> &
 		{
 			best = k;
 		}*/
-		cout << midpoints[k].z << endl;
 		if (midpoints[k].z > midpoints[best].z)
 		{
 			best = k;
 		}
 
 	}
+	
+	
 	// plot the circle at which your main midpoint is DEBUG
 	circle(Again, Point2f(midpoints[best].x, midpoints[best].y), 2, (0, 0, 255), 3);
 	imshow("Preferred Spot", Again);
 	//need to take the slopes and compare to find the biggest slope and then put that point as the preferred point. maybe incorporate
 	//this into the z point for the weight... maybe trade that out for the slope for the weight, though it is kind of nice to have the 
 	// width of what space the robot has to traavel through. some kinds of percentages comaprison
+	return best;
 }
-// Handles the filtering to form the keypoints within the picture and make them into keyfeatures. Calls functions for 
-void pickFeatures(Mat bwdifferential, Mat &picture)
+// Handles the filtering to form the keypoints within the picture and make them into keyfeatures. Calls functions for doing so
+//returns the Point that is the best spot
+Point3f pickFeatures(Mat bwdifferential, Mat &picture)
 {
 	// opening the image (erosion then dilation to reduce noise)
 	//Kernel size is the square of pixels that you are comparing to see if should be white or not... see http://aishack.in/tutorials/mathematical-morphology/
@@ -339,23 +343,25 @@ void pickFeatures(Mat bwdifferential, Mat &picture)
 	Mat maskedI, Again;
 	//create a black image for just the keypoints
 	bwdifferential.copyTo(maskedI);
-	Mat temp; //DEBUG
+	//Mat temp; //DEBUG
 	picture.copyTo(Again);
 	threshold(maskedI, maskedI, 0, 0, THRESH_BINARY);//black image
-	cvtColor(maskedI, maskedI, CV_GRAY2BGR);//lets colors be put onto it, will be able to cut out eventually, DEBUG
-	maskedI.copyTo(temp);// DEBUG
-	findContours(bwdifferential, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));// DEBUG
-	drawContours(temp, contours, -2, Scalar(255, 0, 255), 1); //DEBUG
-	imshow("bw3", temp);//DEBUG
+	//cvtColor(maskedI, maskedI, CV_GRAY2BGR);//lets colors be put onto it, will be able to cut out eventually, DEBUG
+	//maskedI.copyTo(temp);// DEBUG
+	//findContours(bwdifferential, contours, hierarchy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0));// DEBUG
+	//drawContours(temp, contours, -2, Scalar(255, 0, 255), 1); //DEBUG
+	//imshow("bw3", temp);//DEBUG
 
 	drawKeypoints(bwdifferential, keypoints, bwdifferential, (255, 255, 0)); //DEBUG?
 	midpoints.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // maximum amount of midpoints would the keypoints^2- one for each combination of two plus one from the point to each wall
+
 	//slope.resize(keypoints.size()*keypoints.size() + 2 * keypoints.size()); // same as midpoints
 	SortKeypoints(keypoints, maskedI, picture, midpoints);//, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
-	preferredOrdering(midpoints, Again);//slope, Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible
+	int best = preferredOrdering(midpoints, slope, Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible to use to return
 
 	imshow("kp", bwdifferential); // DEBUG
 	imshow("blacky2", picture);//DEBUG?
+	return midpoints[best];
 }
 //looks at the mat of the frame differences to mark which one is the robot that is moving
 void motionSearch(Mat bwdifferential, Mat &frame1)
@@ -522,7 +528,7 @@ int main()
 		frame1 = imread("51.jpg"); // work on the edges as far as their cutoffs.... why it does not select the keypoint with the largest z
 		// height =240
 		// width = 320
-		imshow("Raw", frame1);
+		//imshow("Raw", frame1);
 		Mat hsv1, gray3, croppingObst, grayHold;
 		int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
 
@@ -546,7 +552,6 @@ int main()
 
 		//CROPPING OUT NON_ARENA
 		CropNonArena(hsv1, gray2, gray3, cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
-		imshow("first crop", hsv1);// DEBUG
 		cvtColor(hsv1, croppingObst, CV_HSV2BGR);
 		cvtColor(croppingObst, croppingObst, CV_BGR2GRAY);
 		croppingObst.copyTo(grayHold);
@@ -556,7 +561,10 @@ int main()
 		grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
 
 		//FEATURE SELECTION
-	pickFeatures(croppingObst, grayHold);
+		Point3f drivePoint= pickFeatures(croppingObst, grayHold);
+		circle(frame1, Point2f(drivePoint.x, (drivePoint.y+(frame1.rows-cropFromTopNA+cropFromBottomOA))), 2, (0, 0, 0), 3);
+		
+		imshow("Raw", frame1);
 
 
 		switch (waitKey(10)) {
