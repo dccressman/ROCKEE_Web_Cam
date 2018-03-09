@@ -10,6 +10,7 @@
 #include "C:\Users\Dana\Desktop\OpenCV3\opencv\build\include\opencv\highgui.h"
 #include "C:\Users\Dana\Desktop\OpenCV3\opencv\build\include\opencv2\imgproc\imgproc.hpp"
 #include "C:\Users\Dana\Desktop\OpenCV3\opencv\build\include\opencv2\features2d.hpp"
+#include <thread>
 
 //#include "Adapt.h"
 
@@ -17,12 +18,6 @@ using namespace std;
 using namespace cv;
 char key;
 
-
-Rect objectBoundingRectangle = Rect(0, 0, 0, 0);
-int theObject[2] = { 0,0 };
-Mat edges;
-int minArea = 1000;
-int minDistance = 1000;
 
 //calculates distance between two points given
 float distance(Point p1, Point p2)
@@ -139,8 +134,8 @@ void ObstacleArea(Mat &hsv1, Mat&croppingObst, int &topCrop, int &bottomCrop)
 	adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
 	//adaptiveThreshold(croppingObst, croppingObst, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
 
-	imshow("thresholded", croppingObst);//DEBUG
-	imshow("hsv2", hsv1);//DEBUG
+	//imshow("thresholded", croppingObst);//DEBUG
+	//imshow("hsv2", hsv1);//DEBUG
 }
 //sorts the input of keypoints to pick out the robot path
 //may need updated to simplify since the keypoints are going to be sorted, may be able to ignore completely
@@ -273,8 +268,9 @@ int preferredOrdering(vector<Point3f> &midpoints,vector<float> &slope, Mat &Agai
 	
 	
 	// plot the circle at which your main midpoint is DEBUG
-	circle(Again, Point2f(midpoints[best].x, midpoints[best].y), 2, (0, 0, 255), 3);
-	imshow("Preferred Spot", Again);
+	//circle(Again, Point2f(midpoints[best].x, midpoints[best].y), 2, (0, 0, 255), 3);
+	//imshow("Preferred Spot", Again);
+
 	//need to take the slopes and compare to find the biggest slope and then put that point as the preferred point. maybe incorporate
 	//this into the z point for the weight... maybe trade that out for the slope for the weight, though it is kind of nice to have the 
 	// width of what space the robot has to traavel through. some kinds of percentages comaprison
@@ -314,7 +310,7 @@ Point3f pickFeatures(Mat bwdifferential, Mat &picture)
 
 	//find contours then contours above a set area... fill them in and draw them on the image. This will make it so that the blob detector has an easier time finding them.  Could do a little further erosion depending... also may not work
 
-	imshow("bw2", bwdifferential);//DEBUG?
+	//imshow("bw2", bwdifferential);//DEBUG?
 
 	vector< vector<Point> > contours;//Do I need?
 	vector<Vec4i> hierarchy; // Do I need?
@@ -359,65 +355,102 @@ Point3f pickFeatures(Mat bwdifferential, Mat &picture)
 	SortKeypoints(keypoints, maskedI, picture, midpoints);//, slope);// SortKeypoints-sorts the input of keypoints to pick out the robot path in the middle of them
 	int best = preferredOrdering(midpoints, slope, Again);// takes a look at the sorted "acceptable" midpoints for robot path and selects the best one possible to use to return
 
-	imshow("kp", bwdifferential); // DEBUG
-	imshow("blacky2", picture);//DEBUG?
+	//imshow("kp", bwdifferential); // DEBUG
+	//imshow("blacky2", picture);//DEBUG?
 	return midpoints[best];
 }
 //looks at the mat of the frame differences to mark which one is the robot that is moving
-void motionSearch(Mat bwdifferential, Mat &frame1)
+//void motionSearch(Mat bwdifferential, Mat &frame1)
+//{
+//	Rect objectBoundingRectangle = Rect(0, 0, 0, 0);
+//	int theObject[2] = { 0,0 };
+//	Mat edges;
+//	int minArea = 1000;
+//	int minDistance = 1000;
+//
+//	Mat temp;
+//	bool objectExists = false;
+//	// required for finding the contours which is doen by findContours
+//	vector< vector<Point> > contours;
+//	vector<Vec4i> hierarchy;
+//	bwdifferential.copyTo(temp);// copied so that you don't have to worry about messing up the original
+//	findContours(temp, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);// retrieves external contours
+//	if (contours.size() > 0) { // if contours are found (there are differences shown in bwdifferential)
+//		objectExists = true; // there is an object that has moved
+//		vector< vector<Point> > largestContourVec;
+//		largestContourVec.push_back(contours.at(contours.size() - 1));// sorting the contours so that you have the largest one
+//		objectBoundingRectangle = boundingRect(largestContourVec.at(0)); // bounding the largest contour with a rectangle (box around the robot)
+//		theObject[0] = objectBoundingRectangle.x + objectBoundingRectangle.width / 2; // setting the locations of the object middle X coord
+//		theObject[1] = objectBoundingRectangle.y + objectBoundingRectangle.height / 2; // setting the locations of the object middle Y coord
+//	}
+//	drawContours(frame1, contours, -1, (0, 255, 0), 3);// draw the object contours on the frame
+//	//Detect the main blob - largest contour based on area and the threshold difference- area is area of blobs, thresholding is the grouping of the pixels based on closeness of pixels of same white and black
+//	// parameters for the detector
+//	SimpleBlobDetector::Params params;
+//	params.minThreshold = 10;
+//	params.maxThreshold = 200;
+//	params.filterByArea = true;
+//	params.minArea = 2000;
+//	params.minDistBetweenBlobs = 1700;
+//	params.filterByCircularity = false;
+//	params.filterByColor = false;
+//	params.filterByConvexity = false;
+//	params.filterByInertia = false;
+//
+//	//actual blob detector creation and detection of blobs
+//	Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
+//	vector<KeyPoint> keypoints;
+//	detector->detect(temp, keypoints);
+//	Mat im_keypoints;
+//	// draw them onto the black and white
+//	drawKeypoints(temp, keypoints, im_keypoints, Scalar(0, 0, 255), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//	//imshow("blobs", im_keypoints);
+//
+//
+//	////make some temp x and y variables so we dont have to type out so much
+//	//int x = theObject[0];
+//	//int y = theObject[1];
+//	////draw some crosshairs on the object
+//	//
+//	//circle(frame1, Point(x, y), 20, Scalar(0, 255, 0), 2);
+//	//line(frame1, Point(x, y), Point(x, y - 25), Scalar(0, 255, 0), 2);
+//	//line(frame1, Point(x, y), Point(x, y + 25), Scalar(0, 255, 0), 2);
+//	//line(frame1, Point(x, y), Point(x - 25, y), Scalar(0, 255, 0), 2);
+//	//line(frame1, Point(x, y), Point(x + 25, y), Scalar(0, 255, 0), 2);
+//	////putText(frame1, "Tracking object at (" + to_string(x) + "," + to_string(y) + ")", Point(x, y), 1, 1, Scalar(255, 0, 0), 2);
+//
+//}
+
+// what you pass to the thread that will be called... handles the calling of subprocessing functions
+void imageProcess(Mat &image, bool &done)
 {
 
-
-	Mat temp;
-	bool objectExists = false;
-	// required for finding the contours which is doen by findContours
-	vector< vector<Point> > contours;
-	vector<Vec4i> hierarchy;
-	bwdifferential.copyTo(temp);// copied so that you don't have to worry about messing up the original
-	findContours(temp, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);// retrieves external contours
-	if (contours.size() > 0) { // if contours are found (there are differences shown in bwdifferential)
-		objectExists = true; // there is an object that has moved
-		vector< vector<Point> > largestContourVec;
-		largestContourVec.push_back(contours.at(contours.size() - 1));// sorting the contours so that you have the largest one
-		objectBoundingRectangle = boundingRect(largestContourVec.at(0)); // bounding the largest contour with a rectangle (box around the robot)
-		theObject[0] = objectBoundingRectangle.x + objectBoundingRectangle.width / 2; // setting the locations of the object middle X coord
-		theObject[1] = objectBoundingRectangle.y + objectBoundingRectangle.height / 2; // setting the locations of the object middle Y coord
-	}
-	drawContours(frame1, contours, -1, (0, 255, 0), 3);// draw the object contours on the frame
-	//Detect the main blob - largest contour based on area and the threshold difference- area is area of blobs, thresholding is the grouping of the pixels based on closeness of pixels of same white and black
-	// parameters for the detector
-	SimpleBlobDetector::Params params;
-	params.minThreshold = 10;
-	params.maxThreshold = 200;
-	params.filterByArea = true;
-	params.minArea = 2000;
-	params.minDistBetweenBlobs = 1700;
-	params.filterByCircularity = false;
-	params.filterByColor = false;
-	params.filterByConvexity = false;
-	params.filterByInertia = false;
-
-	//actual blob detector creation and detection of blobs
-	Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
-	vector<KeyPoint> keypoints;
-	detector->detect(temp, keypoints);
-	Mat im_keypoints;
-	// draw them onto the black and white
-	drawKeypoints(temp, keypoints, im_keypoints, Scalar(0, 0, 255), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	//imshow("blobs", im_keypoints);
+	Mat hsv1, gray3,gray2, croppingObst, grayHold;
+	int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
+	cvtColor(image, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
+	cvtColor(image, hsv1, CV_BGR2HSV);
 
 
-	////make some temp x and y variables so we dont have to type out so much
-	//int x = theObject[0];
-	//int y = theObject[1];
-	////draw some crosshairs on the object
-	//
-	//circle(frame1, Point(x, y), 20, Scalar(0, 255, 0), 2);
-	//line(frame1, Point(x, y), Point(x, y - 25), Scalar(0, 255, 0), 2);
-	//line(frame1, Point(x, y), Point(x, y + 25), Scalar(0, 255, 0), 2);
-	//line(frame1, Point(x, y), Point(x - 25, y), Scalar(0, 255, 0), 2);
-	//line(frame1, Point(x, y), Point(x + 25, y), Scalar(0, 255, 0), 2);
-	////putText(frame1, "Tracking object at (" + to_string(x) + "," + to_string(y) + ")", Point(x, y), 1, 1, Scalar(255, 0, 0), 2);
+	adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
+
+
+	//CROPPING OUT NON_ARENA
+	CropNonArena(hsv1, gray2, gray3, cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
+	cvtColor(hsv1, croppingObst, CV_HSV2BGR);
+	cvtColor(croppingObst, croppingObst, CV_BGR2GRAY);
+	croppingObst.copyTo(grayHold);
+
+	//HSV THRESHOLDING FOR OBSTACLE AREA
+	ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
+	grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
+
+	//FEATURE SELECTION
+	Point3f drivePoint = pickFeatures(croppingObst, grayHold);
+	circle(image, Point2f(drivePoint.x, (drivePoint.y + (image.rows - cropFromTopNA + cropFromBottomOA))), 2, (0, 0, 0), 3);
+
+	//imshow("Raw", image);
+	done = true;
+	return;
 
 }
 
@@ -425,17 +458,44 @@ int main()
 {
 	bool debugMode = false;
 	bool pause = false;
-	Mat frame1, frame2;
-	Mat gray1, gray2;
-	Mat differential, bwdifferential;
-	int threshold_value = 20;
-	int BLUR_SIZE = 10;
-	VideoCapture video;
-	int max_thresh = 255;
-	int threshold1 = 0, threshold2 = 0, threshold3 = 0, threshold4 = 0, threshold5 = 0, threshold6 = 0;
-	threshold1 = 220000;
-	threshold2 = 600000;
-	Mat medianBlurred, OrangeCrop, OrangeCrop2;
+	bool thread1Done = false;
+	bool thread2Done = false;
+	bool thread3Done= false;
+	Mat frame1, frame2, frame3;
+	vector<Mat>processed;
+	//Mat gray1, gray2;
+	//Mat differential, bwdifferential;
+	//int threshold_value = 20;
+	//int BLUR_SIZE = 10;
+	VideoCapture video=VideoCapture(0);
+	//int max_thresh = 255;
+	//int threshold1 = 0, threshold2 = 0, threshold3 = 0, threshold4 = 0, threshold5 = 0, threshold6 = 0;
+	//threshold1 = 220000;
+	//threshold2 = 600000;
+	//Mat medianBlurred, OrangeCrop, OrangeCrop2;
+
+	if (!video.isOpened())
+	{
+		cout << "Could not initialize capturing\n";
+		return -1;
+	}
+
+	video.read(frame1); // reads from webcam... hopefully
+	if (!frame1.empty()) {
+		thread thread1(imageProcess,frame1,ref(thread1Done));
+		thread1.join();//detach();
+	}
+	//video.read(frame2); // reads from webcam... hopefully
+	//if (!frame2.empty()) {
+	//	thread thread2(imageProcess, frame2, ref(thread2Done));
+	//	thread2.detach();
+	//}
+	//video.read(frame3); // reads from webcam... hopefully
+	//if (!frame3.empty()) {
+	//	thread thread3(imageProcess, frame3, ref(thread3Done));
+	//	thread3.detach();
+	//}
+
 	while (1)
 	{
 
@@ -525,46 +585,45 @@ int main()
 		}
 		if (video.read(frame1))*/
 
-		frame1 = imread("51.jpg"); // work on the edges as far as their cutoffs.... why it does not select the keypoint with the largest z
+		//frame1 = imread("51.jpg"); // work on the edges as far as their cutoffs.... why it does not select the keypoint with the largest z
+		if (thread1Done)
+		{
+			processed.push_back(frame1);
+			video.read(frame1); // reads from webcam... hopefully
+			if (frame1.empty())
+				break;
+			thread1Done = false;
+			thread thread1(imageProcess, frame1, ref(thread1Done));
+			thread1.detach();
+		}
+		if (thread2Done)
+		{			
+			processed.push_back(frame2);
+			video.read(frame2); // reads from webcam... hopefully
+			if (frame2.empty())
+				break;
+			thread2Done = false;
+			thread thread2(imageProcess, frame2, ref(thread2Done));
+			thread2.detach();
+		}
+		if (thread3Done)
+		{
+			thread3Done = false;
+			processed.push_back(frame3);
+			video.read(frame3); // reads from webcam... hopefully
+			if (frame3.empty())
+				break;
+			thread thread3(imageProcess, frame3, ref(thread3Done));
+			thread3.detach();
+		}
+		if (!processed.empty())
+		{
+			imshow("Raw", processed.back());
+		}
 		// height =240
 		// width = 320
 		//imshow("Raw", frame1);
-		Mat hsv1, gray3, croppingObst, grayHold;
-		int cropFromTopNA, cropFromTopOA, cropFromBottomOA;
-
-		cvtColor(frame1, gray3, CV_BGR2GRAY);//opencv does BGR not RGB as their storage, this was RGB originally- when lotso f the code was written, so may cause issues later
-		cvtColor(frame1, hsv1, CV_BGR2HSV);
-
-		//adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 131, 2);
-		adaptiveThreshold(gray3, gray2, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, 67, 2);
-		//Rect roi = Rect(threshold1, threshold2, 298, (frame1.size().height - threshold2));
-
-		//cvtColor(gray2, gray2, CV_GRAY2BGR);
-		//cvtColor(gray2, gray2, CV_BGR2GRAY);
-
-		//pickFeatures(medianBlurred, gray3);
-		//imshow("Frame1", frame1);
-		//imshow("Gray", gray1);
-		//motionSearch(gray2, gray1);
-		//imshow("BW", gray2);
-		//imshow("AdaptiveThreshold", medianBlurred);
-		//pickFeatures(medianBlurred, gray3);
-
-		//CROPPING OUT NON_ARENA
-		CropNonArena(hsv1, gray2, gray3, cropFromTopNA);// may not need to pass all of these by reference in the future... but also may
-		cvtColor(hsv1, croppingObst, CV_HSV2BGR);
-		cvtColor(croppingObst, croppingObst, CV_BGR2GRAY);
-		croppingObst.copyTo(grayHold);
-
-		//HSV THRESHOLDING FOR OBSTACLE AREA
-		ObstacleArea(hsv1, croppingObst, cropFromTopOA, cropFromBottomOA);
-		grayHold = grayHold(Rect(0, cropFromBottomOA, grayHold.cols, (cropFromTopOA - cropFromBottomOA)));
-
-		//FEATURE SELECTION
-		Point3f drivePoint= pickFeatures(croppingObst, grayHold);
-		circle(frame1, Point2f(drivePoint.x, (drivePoint.y+(frame1.rows-cropFromTopNA+cropFromBottomOA))), 2, (0, 0, 0), 3);
-		
-		imshow("Raw", frame1);
+	
 
 
 		switch (waitKey(10)) {
@@ -600,10 +659,9 @@ int main()
 		}
 
 
-		//	}
+			}
 		video.release();
 
-	}
 	return 0;
 }
 
