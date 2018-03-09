@@ -482,19 +482,19 @@ int main()
 
 	video.read(frame1); // reads from webcam... hopefully
 	if (!frame1.empty()) {
-		thread thread1(imageProcess,frame1,ref(thread1Done));
+		thread thread1(imageProcess, frame1, ref(thread1Done));
 		thread1.join();//detach();
 	}
-	//video.read(frame2); // reads from webcam... hopefully
-	//if (!frame2.empty()) {
-	//	thread thread2(imageProcess, frame2, ref(thread2Done));
-	//	thread2.detach();
-	//}
-	//video.read(frame3); // reads from webcam... hopefully
-	//if (!frame3.empty()) {
-	//	thread thread3(imageProcess, frame3, ref(thread3Done));
-	//	thread3.detach();
-	//}
+	video.read(frame2); // reads from webcam... hopefully
+	if (!frame2.empty()) {
+		thread thread2(imageProcess, frame2, ref(thread2Done));
+		thread2.detach();
+	}
+	video.read(frame3); // reads from webcam... hopefully
+	if (!frame3.empty()) {
+		thread thread3(imageProcess, frame3, ref(thread3Done));
+		thread3.detach();
+	}
 
 	while (1)
 	{
